@@ -1,3 +1,8 @@
+<div class="logo">
+      <img src="figs/logo.png" style="width:360px">
+   </a>
+</div>
+
 ## SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution <br><sub>Official PyTorch Implementation of SeeSR. </sub>
 Codes and pretained models will be released soon.
 
