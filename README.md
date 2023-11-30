@@ -1,4 +1,4 @@
-## SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution <br><sub>Official PyTorch Implementation of DA-CLIP. </sub>
+## SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution <br><sub>Official PyTorch Implementation of SeeSR. </sub>
 Codes and pretained models will be released soon.
 
 [Paper](https://arxiv.org/abs/2311.16518)
