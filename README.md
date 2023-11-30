@@ -35,7 +35,7 @@ Codes and pretained models will be released soon.
 
 <details>
 <summary><strong>More Real-world Cases</strong> (click to expand) </summary>
-![seesr](figs/data_real_suppl.jpg)
+![seesr](https://github.com/cswry/SeeSR/blob/main/figs/data_real_suppl.jpg)
 
 </details>
 
