@@ -66,7 +66,7 @@ The following are BibTeX references:
 ```
 @article{wu2023seesr,
   title={SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution},
-  author={WU, Rongyuan and Yang, tao and Sun, Lingchen and Zhang, Zhengqiang and Li, Shuai and Zhang, Lei},
+  author={Wu, Rongyuan and Yang, Tao and Sun, Lingchen and Zhang, Zhengqiang and Li, Shuai and Zhang, Lei},
   journal={arXiv preprint arXiv:2311.16518},
   year={2023}
 }
