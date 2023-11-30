@@ -54,10 +54,10 @@ Codes and pretained models will be released soon.
 </details>
 
 #### Contact
-If you have any question, please contact: rong-yuan.wu@connect.polyu.hk
+If you have any questions, please contact: rong-yuan.wu@connect.polyu.hk
 
 #### License
-This project is released under the Apache 2.0 license.
+This project is released under the [Apache 2.0 license](LICENSE).
 
 ### Citations
 If our code helps your research or work, please consider citing our paper.
