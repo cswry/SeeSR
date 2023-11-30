@@ -11,12 +11,17 @@ Codes and pretained models will be released soon.
 
 [Paper](https://arxiv.org/abs/2311.16518)
 
-[Rongyuan Wu](https://scholar.google.com.hk/citations?hl=zh-CN&user=A-U8zE8AAAAJ) | [Tao Yang](https://scholar.google.com.hk/citations?hl=zh-CN&user=znRMaO8AAAAJ) | [Lingchen Sun](https://scholar.google.com/citations?hl=zh-CN&tzom=-480&user=ZCDjTn8AAAAJ) | [Zhengqiang Zhang](https://scholar.google.com.hk/citations?hl=zh-CN&user=UX26wSMAAAAJ) | [Shuai Li](https://scholar.google.com.hk/citations?hl=zh-CN&user=Bd73ldQAAAAJ) | [Lei Zhang](https://www4.comp.polyu.edu.hk/~cslzhang/)
+[Rongyuan Wu](https://scholar.google.com.hk/citations?hl=zh-CN&user=A-U8zE8AAAAJ)<sup>1,2</sup> | [Tao Yang](https://scholar.google.com.hk/citations?hl=zh-CN&user=znRMaO8AAAAJ)<sup>3</sup> | [Lingchen Sun](https://scholar.google.com/citations?hl=zh-CN&tzom=-480&user=ZCDjTn8AAAAJ)<sup>1,2</sup> | [Zhengqiang Zhang](https://scholar.google.com.hk/citations?hl=zh-CN&user=UX26wSMAAAAJ)<sup>1,2</sup> | [Shuai Li](https://scholar.google.com.hk/citations?hl=zh-CN&user=Bd73ldQAAAAJ)<sup>1,2</sup> | [Lei Zhang](https://www4.comp.polyu.edu.hk/~cslzhang/)<sup>1,2</sup>
 
-:star: If SeeSR is helpful to your images or projects, please help star this repo. Thanks! :hugs:
+<sup>1</sup>The Hong Kong Polytechnic University, <sup>2</sup>OPPO Research Institute, <sup>3</sup>ByteDance Inc 
+
+
 
 ### Update
 - **2023.11.28**: Repo is released.
+
+
+:star: If SeeSR is helpful to your images or projects, please help star this repo. Thanks! :hugs:
 
 ## Overview framework:
 ![seesr](figs/framework.png)
