@@ -28,38 +28,22 @@ Codes and pretained models will be released soon.
 
 
 
-### Results
-
-
-
-<details>
-<summary><strong>Synthetic Cases</strong> (click to expand) </summary>
-
-![seesr](figs/data_syn.png)
-
-</details>
-
-<details>
-<summary><strong>Real-world Cases</strong> (click to expand) </summary>
-
-![seesr](figs/data_real.png)
-
-</details>
-
-<details>
-<summary><strong>More Real-world Cases</strong> (click to expand) </summary>
-  
+## Real-World Results
 ![seesr](figs/data_real_suppl.jpg)
 
-</details>
 
-#### Contact
-If you have any questions, please contact: rong-yuan.wu@connect.polyu.hk
 
-#### License
+
+
+
+
+## Contact
+If you have any questions, please feel free to contact: rong-yuan.wu@connect.polyu.hk
+
+## License
 This project is released under the [Apache 2.0 license](LICENSE).
 
-### Citations
+## Citations
 If our code helps your research or work, please consider citing our paper.
 The following are BibTeX references:
 
@@ -71,6 +55,9 @@ The following are BibTeX references:
   year={2023}
 }
 ```
+
+## Acknowledgments
+This project is based on [diffusers](https://github.com/huggingface/diffusers) and [BasicSR](https://github.com/XPixelGroup/BasicSR). Some codes are brought from [PASD](https://github.com/yangxy/PASD) and [RAM](https://github.com/xinyu1205/recognize-anything). Thanks for their awesome works.
 
 
 <details>
