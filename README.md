@@ -28,7 +28,7 @@ Codes and pretained models will be released soon.
 - [ ] SeeSR-SD2.1Base-face,text
 - [ ] SeeSR Acceleration
 
-## 🔎 Overview framework:
+## 🔎 Overview framework
 ![seesr](figs/framework.png)
 
 ## 📷 Real-World Results
@@ -48,13 +48,13 @@ pip install -r requirements.txt
 
 ## 🚀 Quick Inference
 #### Step 1: Download the pretrained models
-- Download the pretrained SD-2.1base models from [HuggingFace](https://huggingface.co/stabilityai/stable-diffusion-2-1-base)
-- Download the SeeSR and DAPE models from [GoogleDrive](https://drive.google.com/drive/folders/12HXrRGEXUAnmHRaf0bIn-S8XSK4Ku0JO?usp=drive_link) 
+- Download the pretrained SD-2.1base models from [HuggingFace](https://huggingface.co/stabilityai/stable-diffusion-2-1-base).
+- Download the SeeSR and DAPE models from [GoogleDrive](https://drive.google.com/drive/folders/12HXrRGEXUAnmHRaf0bIn-S8XSK4Ku0JO?usp=drive_link) .
 
 You can put the models into `preset/models`.
 
 #### Step 2: Prepare testing data
-You can put the testing images in the `preset/datasets/test_datasets`
+You can put the testing images in the `preset/datasets/test_datasets`.
 
 #### Step 3: Running testing command
 ```
@@ -71,13 +71,13 @@ python test_seesr.py \
 --process_size 512 
 ```
 
-The default settings are optimized for the best result. However, the behavior of the code can be customized:
+The default settings are optimized for the best result. However, the behavior of the code can be customized
 - Trade-offs between the **fidelity** and **perception**  
   - `--num_inference_steps` Using more sampling steps in `Real-world SR` tasks is not a purely beneficial choice. While it improves the perception quality, it can also reduce fidelity quality as it generates more. Considering the trade-offs between fidelity and perception, as well as the inference time cost, we set the default value to `50`. However, you can make appropriate adjustments based on your specific needs.
   - `--guidance_scale` A higher value means unleashing more generation capacity of SD, which improves perception quality but decreases fidelity quality. We set the default value to `5.5`, you can make appropriate adjustments based on your specific needs.
   - `--process_size` The inference script resizes input images to the `process_size`, and then resizes the prediction back to the original resolution after process. We found that increasing the processing size (e.g. 768) improves fidelity but decreases perception. We set the default value to `512`, consistent with the training size of the pre-trained SD model. You can make appropriate adjustments based on your specific needs.
 
-- User-specified mode.
+- User-specified mode
   - `--prompt` SeeSR utilizes DAPE to automatically extract tag prompts from LR images, but it is not the most perfect approach. You can try manually specifying appropriate tag prompts to further enhance the quality of the results.
 
 #### Test Benchmark
