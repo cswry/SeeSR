@@ -1,4 +1,6 @@
-diffusers=0.21.4
+diffusers==0.21.0
+torch==2.0.1
+pytorch_lightning
 accelerate
 transformers
 xformers    
