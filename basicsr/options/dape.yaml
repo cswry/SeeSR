@@ -1,0 +1,74 @@
+# general settings
+name: DAPE
+model_type: DAPEModel
+num_gpu: auto  # set num_gpu: 0 for cpu mode
+manual_seed: 10
+ram_model_path: preset/models/ram_swin_large_14m.pth
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: train_dataset
+    type: DAPEDataset
+    root: ['your training dataset path']
+    ext: ['*.png']
+    # data loader
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 8
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+    
+
+# network structures
+network_g: ram_swin_bert_lora
+
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: false
+  resume_state: ~
+
+# training settings
+train:
+  ema_decay: 0
+  optim_g:
+    type: AdamW
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.999]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [20000, 30000]
+    gamma: 0.5
+
+  total_iter: 300000
+  warmup_iter: 50  # no warm up
+
+  # losses
+  cri_feature_opt:
+    type: MSELoss
+    loss_weight: 1.0
+    reduction: mean
+
+
+
+# validation settings
+val:
+  val_freq: !!float 1e8 # !!float 5e3
+  save_img: false
+
+# logging settings
+logger:
+  print_freq: 1
+  save_checkpoint_freq: !!float 1e3 # !!float 5e3
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
