@@ -29,8 +29,8 @@
 ![seesr](figs/framework.png)
 
 ## 📷 Real-World Results
-[<img src="figs/building.png" height="310px"/>](https://imgsli.com/MjI5MTA2) [<img src="figs/person1.png" height="310px"/>](https://imgsli.com/MjI5MTA3)
-[<img src="figs/nature.png" height="310px"/>](https://imgsli.com/MjI5MTA0) [<img src="figs/bird1.png" height="310px"/>](https://imgsli.com/MjI5MTA1) 
+[<img src="figs/building.png" height="320px"/>](https://imgsli.com/MjI5MTA2) [<img src="figs/person1.png" height="320px"/>](https://imgsli.com/MjI5MTA3)
+[<img src="figs/nature.png" height="320px"/>](https://imgsli.com/MjI5MTA0) [<img src="figs/bird1.png" height="320px"/>](https://imgsli.com/MjI5MTA1) 
 
 
 
