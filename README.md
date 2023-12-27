@@ -17,7 +17,7 @@
 ### 📢 News
 - **2023.12.25**: 🎅🎄🎅🎄 *Merry Christmas!!!* 
   - 🍺 Release SeeSR-SD2.1Base, including the codes and pretrained models. 
-  - 📏 We also release [RealLR200](https://drive.google.com/drive/folders/1L2VsQYQRKhWJxe6yWZU9FgBWSgBCk6mz?usp=drive_link). It includes 200 real low-resolution images.
+  - 📏 We also release [RealLR200](https://drive.google.com/drive/folders/1L2VsQYQRKhWJxe6yWZU9FgBWSgBCk6mz?usp=drive_link). It includes 200 real-world low-resolution images.
 - **2023.11.28**: Create this repo.
 
 ### 📌 TODO
@@ -29,6 +29,8 @@
 ![seesr](figs/framework.png)
 
 ## 📷 Real-World Results
+[<img src="examples/cover/bird1.png" height="223px"/>](https://imgsli.com/MjI5MDg4)
+[<img src="examples/cover/bird1.png" height="223px"/>](https://imgsli.com/MjI5MDkz)
 ![seesr](figs/data_real_suppl.jpg)
 
 ## ⚙️ Dependencies and Installation
