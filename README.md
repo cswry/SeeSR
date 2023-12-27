@@ -29,8 +29,13 @@
 ![seesr](figs/framework.png)
 
 ## 📷 Real-World Results
-[<img src="examples/cover/bird1.png" height="223px"/>](https://imgsli.com/MjI5MDg4)
-[<img src="examples/cover/bird1.png" height="223px"/>](https://imgsli.com/MjI5MDkz)
+[<img src="figs/building.png" height="350px"/>](https://imgsli.com/MjI5MTA2) [<img src="figs/person1.png" height="350px"/>](https://imgsli.com/MjI5MTA3)
+[<img src="figs/nature.png" height="350px"/>](https://imgsli.com/MjI5MTA0) [<img src="figs/bird1.png" height="350px"/>](https://imgsli.com/MjI5MTA1) 
+
+
+
+
+
 ![seesr](figs/data_real_suppl.jpg)
 
 ## ⚙️ Dependencies and Installation
