@@ -101,8 +101,8 @@ def load_seesr_pipeline(args, accelerator, enable_xformers_memory_efficient_atte
         vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, feature_extractor=feature_extractor, 
         unet=unet, controlnet=controlnet, scheduler=scheduler, safety_checker=None, requires_safety_checker=False,
     )
-    #validation_pipeline.enable_vae_tiling()
-    validation_pipeline._init_tiled_vae(decoder_tile_size=args.vae_tiled_size)
+    
+    validation_pipeline._init_tiled_vae(encoder_tile_size=args.vae_encoder_tiled_size, decoder_tile_size=args.vae_decoder_tiled_size)
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -251,9 +251,10 @@ if __name__ == "__main__":
     parser.add_argument("--blending_alpha", type=float, default=1.0)
     parser.add_argument("--num_inference_steps", type=int, default=50)
     parser.add_argument("--process_size", type=int, default=512)
-    parser.add_argument("--vae_tiled_size", type=int, default=224) # for 24G
-    parser.add_argument("--latent_tiled_size", type=int, default=320) # for 24G
-    parser.add_argument("--latent_tiled_overlap", type=int, default=4) # for 24G
+    parser.add_argument("--vae_decoder_tiled_size", type=int, default=224) # for 24G
+    parser.add_argument("--vae_encoder_tiled_size", type=int, default=1024) # for 13G
+    parser.add_argument("--latent_tiled_size", type=int, default=320) # for 16G
+    parser.add_argument("--latent_tiled_overlap", type=int, default=4) # for 16G
     parser.add_argument("--upscale", type=int, default=4)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--sample_times", type=int, default=1)

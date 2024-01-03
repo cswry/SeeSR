@@ -196,8 +196,8 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
         encoder = self.vae.encoder
         decoder = self.vae.decoder
 
-        # self.vae.encoder.forward = VAEHook(
-        #     encoder, encoder_tile_size, is_decoder=False, fast_decoder=fast_decoder, fast_encoder=fast_encoder, color_fix=color_fix, to_gpu=vae_to_gpu)
+        self.vae.encoder.forward = VAEHook(
+            encoder, encoder_tile_size, is_decoder=False, fast_decoder=fast_decoder, fast_encoder=fast_encoder, color_fix=color_fix, to_gpu=vae_to_gpu)
         self.vae.decoder.forward = VAEHook(
             decoder, decoder_tile_size, is_decoder=True, fast_decoder=fast_decoder, fast_encoder=fast_encoder, color_fix=color_fix, to_gpu=vae_to_gpu)
 
