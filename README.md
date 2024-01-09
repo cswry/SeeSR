@@ -15,10 +15,11 @@
 
 :star: If SeeSR is helpful to your images or projects, please help star this repo. Thanks! :hugs:
 ### 📢 News
-- **2023.12.25**: 🎅🎄🎅🎄 *Merry Christmas!!!* 
+- **2024.01.09** 🚀 Add Gradio demo.
+- **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
   - 🍺 Release SeeSR-SD2.1Base, including the codes and pretrained models. 
   - 📏 We also release `RealLR200`. It includes 200 real-world low-resolution images.
-- **2023.11.28**: Create this repo.
+- **2023.11.28** Create this repo.
 
 ### 📌 TODO
 - [ ] SeeSR-SDXL
@@ -86,6 +87,14 @@ The default settings are optimized for the best result. However, the behavior of
 
 #### Note
 Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae method proposed by [multidiffusion-upscaler-for-automatic1111](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111) to save GPU memory.
+
+#### Gradio Demo
+Please put the all pretrained models at `preset/models`, and then run the following command to interact with the gradio website.
+```
+python gradio_seesr.py 
+```
+![seesr](figs/gradio.png)
+
 
 #### Test Benchmark
 We release our `RealLR200` at [GoogleDrive](https://drive.google.com/drive/folders/1L2VsQYQRKhWJxe6yWZU9FgBWSgBCk6mz?usp=drive_link) and [OneDrive](https://connectpolyu-my.sharepoint.com/:f:/g/personal/22042244r_connect_polyu_hk/EmRLN-trNypJtO4tqleF4mAB5pVME060hRj6xuBXGsUCaA?e=PykXVx). You can download `RealSR` and `DRealSR` from [StableSR](https://huggingface.co/datasets/Iceclear/StableSR-TestSets). We also provide the copy of that at [GoogleDrive](https://drive.google.com/drive/folders/1L2VsQYQRKhWJxe6yWZU9FgBWSgBCk6mz?usp=drive_link) and [OneDrive](https://connectpolyu-my.sharepoint.com/:f:/g/personal/22042244r_connect_polyu_hk/EmRLN-trNypJtO4tqleF4mAB5pVME060hRj6xuBXGsUCaA?e=PykXVx). As for the synthetic test set, you can obtain it through the synthetic methods described below.

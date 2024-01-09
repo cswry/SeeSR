@@ -806,6 +806,8 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
         start_steps = 999,
         start_point = 'noise',
         ram_encoder_hidden_states=None,
+        latent_tiled_size=320,
+        latent_tiled_overlap=4,
         args=None
     ):
         r"""
@@ -999,7 +1001,7 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             
             _, _, h, w = latents.size()
-            tile_size, tile_overlap = (args.latent_tiled_size, args.latent_tiled_overlap) if args is not None else (256, 8)
+            tile_size, tile_overlap = (latent_tiled_size, latent_tiled_overlap) if args is not None else (256, 8)
             if h*w<=tile_size*tile_size:
                 print(f"[Tiled Latent]: the input size is tiny and unnecessary to tile.")
             else:
