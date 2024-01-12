@@ -6,3 +6,5 @@ transformers==4.25.0
 xformers    
 loralib
 fairscale
+pydantic==1.10.11
+gradio==3.24.0
