@@ -144,14 +144,15 @@ class Predictor(BasePredictor):
         images = []
         for _ in range(sample_times):
             try:
-                image = self.validation_pipeline(
-                    validation_prompt, input_image, negative_prompt=negative_prompt,
-                    num_inference_steps=num_inference_steps, generator=generator,
-                    height=height, width=width,
-                    guidance_scale=cfg_scale,  conditioning_scale=1,
-                    start_point='lr', start_steps=999,ram_encoder_hidden_states=ram_encoder_hidden_states,
-                    latent_tiled_size=latent_tiled_size, latent_tiled_overlap=latent_tiled_overlap
-                ).images[0]
+                with torch.autocast("cuda"):
+                    image = self.validation_pipeline(
+                        validation_prompt, input_image, negative_prompt=negative_prompt,
+                        num_inference_steps=num_inference_steps, generator=generator,
+                        height=height, width=width,
+                        guidance_scale=cfg_scale,  conditioning_scale=1,
+                        start_point='lr', start_steps=999,ram_encoder_hidden_states=ram_encoder_hidden_states,
+                        latent_tiled_size=latent_tiled_size, latent_tiled_overlap=latent_tiled_overlap
+                    ).images[0]
 
                 if True:  # alpha<1.0:
                     image = wavelet_color_fix(image, input_image)
@@ -181,7 +182,7 @@ class Predictor(BasePredictor):
         seed: int = Input(description="Seed", default=231, ge=0, le=2147483647),
     ) -> List[Path]:
         """Run a single prediction on the model"""
-        pil_image = Image.open(image)
+        pil_image = Image.open(image).convert("RGB")
         imgs = self.process(
             pil_image, user_prompt, positive_prompt, negative_prompt, num_inference_steps,
             scale_factor, cfg_scale, seed, latent_tiled_size, latent_tiled_overlap, sample_times)
