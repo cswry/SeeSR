@@ -16,7 +16,7 @@
 
 :star: If SeeSR is helpful to your images or projects, please help star this repo. Thanks! :hugs:
 ### 📢 News
-- **2024.01.12** 🔥🔥🔥 Integrated to <u>[Replicate](https://replicate.com/lucataco/seesr)</u>. Try out Replicate online demo! ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a>
+- **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out Replicate online demo! ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
 - **2024.01.09** 🚀 Add Gradio demo.
 - **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
   - 🍺 Release SeeSR-SD2.1Base, including the codes and pretrained models. 
