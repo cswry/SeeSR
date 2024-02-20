@@ -19,13 +19,13 @@
 - **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out <u>[Replicate](https://replicate.com/lucataco/seesr)</u> online demo ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
 - **2024.01.09** 🚀 Add Gradio demo.
 - **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
-  - 🍺 Release SeeSR-SD2.1Base, including the codes and pretrained models. 
+  - 🍺 Release SeeSR-SD2-Base, including the codes and pretrained models. 
   - 📏 We also release `RealLR200`. It includes 200 real-world low-resolution images.
 - **2023.11.28** Create this repo.
 
 ### 📌 TODO
 - [ ] SeeSR-SDXL
-- [ ] SeeSR-SD2.1Base-face,text
+- [ ] SeeSR-SD2-Base-face,text
 - [ ] SeeSR Acceleration
 
 ## 🔎 Overview framework
@@ -55,7 +55,7 @@ pip install -r requirements.txt
 
 ## 🚀 Quick Inference
 #### Step 1: Download the pretrained models
-- Download the pretrained SD-2.1base models from [HuggingFace](https://huggingface.co/stabilityai/stable-diffusion-2-1-base).
+- Download the pretrained SD-2-base models from [HuggingFace](https://huggingface.co/stabilityai/stable-diffusion-2).
 - Download the SeeSR and DAPE models from [GoogleDrive](https://drive.google.com/drive/folders/12HXrRGEXUAnmHRaf0bIn-S8XSK4Ku0JO?usp=drive_link) or [OneDrive](https://connectpolyu-my.sharepoint.com/:f:/g/personal/22042244r_connect_polyu_hk/EiUmSfWRmQFNiTGJWs7rOx0BpZn2xhoKN6tXFmTSGJ4Jfw?e=RdLbvg).
 
 You can put the models into `preset/models`.
@@ -104,7 +104,7 @@ We release our `RealLR200` at [GoogleDrive](https://drive.google.com/drive/folde
 ## 🌈 Train 
 
 #### Step1: Download the pretrained models
-Download the pretrained [SD-2.1base models](https://huggingface.co/stabilityai/stable-diffusion-2-1-base) and [RAM](https://huggingface.co/spaces/xinyu1205/recognize-anything/blob/main/ram_swin_large_14m.pth). You can put them into `preset/models`.
+Download the pretrained [SD-2-base models](https://huggingface.co/stabilityai/stable-diffusion-2) and [RAM](https://huggingface.co/spaces/xinyu1205/recognize-anything/blob/main/ram_swin_large_14m.pth). You can put them into `preset/models`.
 
 #### Step2: Prepare training data
 We pre-prepare training data pairs for the training process, which would take up some memory space but save training time. We train the DAPE with [COCO](https://cocodataset.org/#home) and train the SeeSR with common low-level datasets, such as DF2K.
