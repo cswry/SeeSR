@@ -4,7 +4,7 @@
 </div>
 
       
-## SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution 
+## SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution (CVPR2024)
 
 <a href='https://arxiv.org/abs/2311.16518'><img src='https://img.shields.io/badge/arXiv-2311.16518-b31b1b.svg'></a> &nbsp;&nbsp;
 <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> &nbsp;&nbsp;
