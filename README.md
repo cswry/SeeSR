@@ -19,7 +19,7 @@
 
 
 ### 📢 News
-- **2024.03.07** Support [SD-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with 2 steps. Please refer to [it](#Step-sd-turbo).
+- **2024.03.07** Support [SD-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with only **2 steps** ⚡️. Please refer to [it](#Step-sd-turbo).
 - **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out <u>[Replicate](https://replicate.com/lucataco/seesr)</u> online demo ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
 - **2024.01.09** 🚀 Add Gradio demo.
 - **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
@@ -30,7 +30,7 @@
 ### 📌 TODO
 - [ ] SeeSR-SDXL
 - [ ] SeeSR-SD2-Base-face,text
-- [ ] SeeSR Acceleration
+- [ ] ~~SeeSR Acceleration~~
 
 ## 🔎 Overview framework
 ![seesr](figs/framework.png)
@@ -98,7 +98,7 @@ python test_seesr.py \
 --guidance_scale 5.5 \
 --process_size 512 
 ```
-
+[<img src="figs/frog-turbo.png" height="450px"/>](https://imgsli.com/MjQ2MDE5/1/2) [<img src="figs/building-turbo.png" height="450px"/>](https://imgsli.com/MjQ2MDY2)
 
 #### Note
 Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae method proposed by [multidiffusion-upscaler-for-automatic1111](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111) to save GPU memory.
