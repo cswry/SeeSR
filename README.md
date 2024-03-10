@@ -19,7 +19,7 @@
 
 
 ### 📢 News
-- **2024.03.07** Support [SD-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with only **2 steps** ⚡️. Please refer to [it](#Step-sd-turbo).
+- **2024.03.10** Support [SD-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with only **2 steps** ⚡️. Please refer to [it](#Step-sd-turbo).
 - **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out <u>[Replicate](https://replicate.com/lucataco/seesr)</u> online demo ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
 - **2024.01.09** 🚀 Add Gradio demo.
 - **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
