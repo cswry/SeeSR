@@ -255,8 +255,8 @@ if __name__ == "__main__":
     parser.add_argument("--process_size", type=int, default=512)
     parser.add_argument("--vae_decoder_tiled_size", type=int, default=224) # latent size, for 24G
     parser.add_argument("--vae_encoder_tiled_size", type=int, default=1024) # image size, for 13G
-    parser.add_argument("--latent_tiled_size", type=int, default=320) # for 16G
-    parser.add_argument("--latent_tiled_overlap", type=int, default=4) # for 16G
+    parser.add_argument("--latent_tiled_size", type=int, default=96) 
+    parser.add_argument("--latent_tiled_overlap", type=int, default=32) 
     parser.add_argument("--upscale", type=int, default=4)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--sample_times", type=int, default=1)

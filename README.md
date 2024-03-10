@@ -19,6 +19,7 @@
 
 
 ### 📢 News
+- **2024.03.07** Support [SD-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with 2 steps. Please refer to [it](#Step-sd-turbo).
 - **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out <u>[Replicate](https://replicate.com/lucataco/seesr)</u> online demo ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
 - **2024.01.09** 🚀 Add Gradio demo.
 - **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
@@ -70,7 +71,7 @@ You can put the testing images in the `preset/datasets/test_datasets`.
 ```
 python test_seesr.py \
 --pretrained_model_path preset/models/stable-diffusion-2-base \
---prompt None \
+--prompt '' \
 --seesr_model_path preset/models/seesr \
 --ram_ft_path preset/models/DAPE.pth \
 --image_path preset/datasets/test_datasets \
@@ -80,15 +81,24 @@ python test_seesr.py \
 --guidance_scale 5.5 \
 --process_size 512 
 ```
+More details are [here](asserts/hyp.md)
 
-The default settings are optimized for the best result. However, the behavior of the code can be customized
-- Trade-offs between the **fidelity** and **perception**  
-  - `--num_inference_steps` Using more sampling steps in `Real-world SR` tasks is not a purely beneficial choice. While it improves the perception quality, it can also reduce fidelity quality as it generates more. Considering the trade-offs between fidelity and perception, as well as the inference time cost, we set the default value to `50`. However, you can make appropriate adjustments based on your specific needs.
-  - `--guidance_scale` A higher value means unleashing more generation capacity of SD, which improves perception quality but decreases fidelity quality. We set the default value to `5.5`, you can make appropriate adjustments based on your specific needs.
-  - `--process_size` The inference script resizes input images to the `process_size`, and then resizes the prediction back to the original resolution after process. We found that increasing the processing size (e.g. 768) improves fidelity but decreases perception. We set the default value to `512`, consistent with the training size of the pre-trained SD model. You can make appropriate adjustments based on your specific needs.
+#### Step-sd-turbo
+Just download the weights from [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), and put them into `preset/models`. Then, you can run the command
+```
+python test_seesr.py \
+--pretrained_model_path preset/models/sd-turbo \
+--prompt '' \
+--seesr_model_path preset/models/seesr \
+--ram_ft_path preset/models/DAPE.pth \
+--image_path preset/datasets/test_datasets \
+--output_dir preset/datasets/output \
+--start_point lr \
+--num_inference_steps 2 \
+--guidance_scale 5.5 \
+--process_size 512 
+```
 
-- User-specified mode
-  - `--prompt` SeeSR utilizes DAPE to automatically extract tag prompts from LR images, but it is not the most perfect approach. You can try manually specifying appropriate tag prompts to further enhance the quality of the results.
 
 #### Note
 Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae method proposed by [multidiffusion-upscaler-for-automatic1111](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111) to save GPU memory.
