@@ -98,7 +98,7 @@ python test_seesr.py \
 --guidance_scale 5.5 \
 --process_size 512 
 ```
-[<img src="figs/frog-turbo.png" height="450px"/>](https://imgsli.com/MjQ2MDE5/1/2) [<img src="figs/building-turbo.png" height="450px"/>](https://imgsli.com/MjQ2MDY2)
+[<img src="figs/frog-turbo.png" height="350px"/>](https://imgsli.com/MjQ2MDE5/1/2) [<img src="figs/building-turbo.png" height="350px"/>](https://imgsli.com/MjQ2MDY2)
 
 #### Note
 Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae method proposed by [multidiffusion-upscaler-for-automatic1111](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111) to save GPU memory.
