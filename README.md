@@ -19,9 +19,9 @@
 
 
 ### 📢 News
-- **2024.03.10** Support [SD-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with only **2 steps** ⚡️. Please refer to [it](#Step-sd-turbo).
+- **2024.03.10** Support [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with only **2 steps** ⚡️. Please refer to [it](#Step-sd-turbo).
 - **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out <u>[Replicate](https://replicate.com/lucataco/seesr)</u> online demo ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
-- **2024.01.09** 🚀 Add Gradio demo.
+- **2024.01.09** 🚀 Add Gradio demo, including turbo mode.
 - **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
   - 🍺 Release SeeSR-SD2-Base, including the codes and pretrained models. 
   - 📏 We also release `RealLR200`. It includes 200 real-world low-resolution images.
@@ -84,9 +84,9 @@ python test_seesr.py \
 More details are [here](asserts/hyp.md)
 
 #### Step-sd-turbo
-Just download the weights from [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), and put them into `preset/models`. Then, you can run the command
+Just download the weights from [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), and put them into `preset/models`. Then, you can run the command. More comparisons can be found [here](asserts/turbo.md). Note that the `guidance_scale` is fixed to `1.0` in turbo mode.
 ```
-python test_seesr.py \
+python test_seesr_turbo.py \
 --pretrained_model_path preset/models/sd-turbo \
 --prompt '' \
 --seesr_model_path preset/models/seesr \
@@ -95,10 +95,10 @@ python test_seesr.py \
 --output_dir preset/datasets/output \
 --start_point lr \
 --num_inference_steps 2 \
---guidance_scale 5.5 \
+--guidance_scale 1.0 \
 --process_size 512 
 ```
-[<img src="figs/frog-turbo.png" height="350px"/>](https://imgsli.com/MjQ2MDE5/1/2) [<img src="figs/building-turbo.png" height="350px"/>](https://imgsli.com/MjQ2MDY2)
+[<img src="figs/turbo_steps02_frog.png" height="350px"/>](https://imgsli.com/MjQ2ODA0) [<img src="figs/turbo_steps02_building.png" height="350px"/>](https://imgsli.com/MjQ2ODA2)
 
 #### Note
 Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae method proposed by [multidiffusion-upscaler-for-automatic1111](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111) to save GPU memory.
@@ -107,6 +107,10 @@ Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae m
 Please put the all pretrained models at `preset/models`, and then run the following command to interact with the gradio website.
 ```
 python gradio_seesr.py 
+```
+We also provide gradio with [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), have fun. 🤗
+```
+python gradio_seesr_turbo.py 
 ```
 ![seesr](figs/gradio.png)
 

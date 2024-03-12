@@ -80,7 +80,7 @@ def load_seesr_pipeline(args, accelerator, enable_xformers_memory_efficient_atte
     tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_path, subfolder="tokenizer")
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_path, subfolder="vae")
     feature_extractor = CLIPImageProcessor.from_pretrained(f"{args.pretrained_model_path}/feature_extractor")
-    unet = UNet2DConditionModel.from_pretrained(args.seesr_model_path, subfolder="unet")
+    unet = UNet2DConditionModel.from_pretrained_orig(args.pretrained_model_path, args.seesr_model_path, subfolder="unet", use_image_cross_attention=True)
     controlnet = ControlNetModel.from_pretrained(args.seesr_model_path, subfolder="controlnet")
     
     # Freeze vae and text_encoder
@@ -248,10 +248,10 @@ if __name__ == "__main__":
     parser.add_argument("--image_path", type=str, default=None)
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--mixed_precision", type=str, default="fp16") # no/fp16/bf16
-    parser.add_argument("--guidance_scale", type=float, default=5.5)
+    parser.add_argument("--guidance_scale", type=float, default=1.0)
     parser.add_argument("--conditioning_scale", type=float, default=1.0)
     parser.add_argument("--blending_alpha", type=float, default=1.0)
-    parser.add_argument("--num_inference_steps", type=int, default=50)
+    parser.add_argument("--num_inference_steps", type=int, default=2)
     parser.add_argument("--process_size", type=int, default=512)
     parser.add_argument("--vae_decoder_tiled_size", type=int, default=224) # latent size, for 24G
     parser.add_argument("--vae_encoder_tiled_size", type=int, default=1024) # image size, for 13G

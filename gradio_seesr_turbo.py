@@ -36,7 +36,7 @@ ram_transforms = transforms.Compose([
 
 
 # Load scheduler, tokenizer and models.
-pretrained_model_path = 'preset/models/stable-diffusion-2-1-base'
+pretrained_model_path = 'preset/models/sd-turbo'
 seesr_model_path = 'preset/models/seesr'
 
 scheduler = DDPMScheduler.from_pretrained(pretrained_model_path, subfolder="scheduler")
@@ -44,7 +44,7 @@ text_encoder = CLIPTextModel.from_pretrained(pretrained_model_path, subfolder="t
 tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer")
 vae = AutoencoderKL.from_pretrained(pretrained_model_path, subfolder="vae")
 feature_extractor = CLIPImageProcessor.from_pretrained(f"{pretrained_model_path}/feature_extractor")
-unet = UNet2DConditionModel.from_pretrained(seesr_model_path, subfolder="unet")
+unet = UNet2DConditionModel.from_pretrained_orig(seesr_model_path, subfolder="unet")
 controlnet = ControlNetModel.from_pretrained(seesr_model_path, subfolder="controlnet")
 
 # Freeze vae and text_encoder
@@ -178,8 +178,8 @@ with block:
                     label="Negative Prompt",
                     value="dotted, noise, blur, lowres, oversmooth, longbody, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality"
                 )
-                cfg_scale = gr.Slider(label="Classifier Free Guidance Scale (Set a value larger than 1 to enable it!)", minimum=0.1, maximum=10.0, value=5.5, step=0.1)
-                num_inference_steps = gr.Slider(label="Inference Steps", minimum=10, maximum=100, value=50, step=1)
+                cfg_scale = gr.Slider(label="Classifier Free Guidance Scale (Set to 1.0 in sd-turbo)", minimum=1, maximum=1, value=1, step=0)
+                num_inference_steps = gr.Slider(label="Inference Steps", minimum=2, maximum=8, value=2, step=1)
                 seed = gr.Slider(label="Seed", minimum=-1, maximum=2147483647, step=1, value=231)
                 sample_times = gr.Slider(label="Sample Times", minimum=1, maximum=10, step=1, value=1)
                 latent_tiled_size = gr.Slider(label="Diffusion Tile Size", minimum=128, maximum=480, value=320, step=1)
