@@ -553,7 +553,6 @@ def parse_args(input_args=None):
 
     parser.add_argument("--root_folders",  type=str , default='' )
     parser.add_argument("--null_text_ratio", type=float, default=0.5)
-    parser.add_argument("--use_ram_encoder", action='store_true')
     parser.add_argument("--ram_ft_path", type=str, default=None)
     parser.add_argument('--trainable_modules', nargs='*', type=str, default=["image_attentions"])
 
@@ -673,7 +672,7 @@ if not args.unet_model_name_or_path:
     # resume from SD
     logger.info("Loading unet weights from SD")
     unet = UNet2DConditionModel.from_pretrained_orig(
-        args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, use_image_cross_attention=args.use_ram_encoder
+        args.pretrained_model_name_or_path, args.unet_model_name_or_path, subfolder="unet", revision=args.revision, use_image_cross_attention=True
     )
 else:
     # resume from self-train
