@@ -1026,9 +1026,10 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         return UNet2DConditionOutput(sample=sample)
 
     @classmethod
-    def from_pretrained_orig(cls, pretrained_model_path, subfolder=None, use_image_cross_attention=False, **kwargs):
+    def from_pretrained_orig(cls, pretrained_model_path, seesr_model_path, subfolder=None, use_image_cross_attention=False, **kwargs):
         if subfolder is not None:
             pretrained_model_path = os.path.join(pretrained_model_path, subfolder)
+            seesr_model_path = os.path.join(seesr_model_path, subfolder)
 
         config_file = os.path.join(pretrained_model_path, 'config.json')
         if not os.path.isfile(config_file):
@@ -1054,36 +1055,17 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         ## for .safetensors file
         import safetensors
         model_file = os.path.join(pretrained_model_path, SAFETENSORS_WEIGHTS_NAME)
+        model_file_seesr = os.path.join(seesr_model_path, SAFETENSORS_WEIGHTS_NAME)
         if not os.path.isfile(model_file):
             raise RuntimeError(f"{model_file} does not exist")
+        if not os.path.isfile(model_file_seesr):
+            raise RuntimeError(f"{model_file_seesr} does not exist")
         state_dict = safetensors.torch.load_file(model_file, device="cpu")
-        model.load_state_dict(state_dict, strict=False)
-
-        return model
-
-    @classmethod
-    def from_pretrained_safetensor(cls, pretrained_model_path, subfolder=None, use_image_cross_attention=False, **kwargs):
-        if subfolder is not None:
-            pretrained_model_path = os.path.join(pretrained_model_path, subfolder)
-
-        config_file = os.path.join(pretrained_model_path, 'config.json')
-        if not os.path.isfile(config_file):
-            raise RuntimeError(f"{config_file} does not exist")
-        with open(config_file, "r") as f:
-            config = json.load(f)
-
-        config['use_image_cross_attention'] = use_image_cross_attention
-
-        from diffusers.utils import SAFETENSORS_WEIGHTS_NAME
-        model = cls.from_config(config)
-        model_file = os.path.join(pretrained_model_path, SAFETENSORS_WEIGHTS_NAME)
-        if not os.path.isfile(model_file):
-            raise RuntimeError(f"{model_file} does not exist")
-        state_dict = torch.load(model_file, map_location="cpu")
-        for k, v in model.state_dict().items():
-            if 'attn2_plus' in k:
-                print(k)
-                state_dict.update({k: v})
+        state_dict_seesr = safetensors.torch.load_file(model_file_seesr, device="cpu")
+        # for k, v in model_seesr.state_dict().items():
+        for k, v in state_dict_seesr.items():
+           if 'image_attentions' in k:
+               state_dict.update({k: v})
         model.load_state_dict(state_dict, strict=False)
 
         return model

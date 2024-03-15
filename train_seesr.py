@@ -668,17 +668,17 @@ vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolde
 # unet = UNet2DConditionModel.from_pretrained(
 #     args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
 # )
-if not args.unet_model_name_or_path:
-    # resume from SD
-    logger.info("Loading unet weights from SD")
+if args.unet_model_name_or_path:
+    # resume from self-train
+    logger.info("Loading unet weights from self-train")
     unet = UNet2DConditionModel.from_pretrained_orig(
         args.pretrained_model_name_or_path, args.unet_model_name_or_path, subfolder="unet", revision=args.revision, use_image_cross_attention=True
     )
 else:
-    # resume from self-train
-    logger.info("Loading unet weights from self-train")
+    # resume from pretrained SD
+    logger.info("Loading unet weights from SD")
     unet = UNet2DConditionModel.from_pretrained(
-        args.unet_model_name_or_path, subfolder="unet", revision=args.revision
+        args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision, use_image_cross_attention=True
     )
     print(f'===== if use ram encoder? {unet.config.use_image_cross_attention}')
 
