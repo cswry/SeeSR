@@ -208,11 +208,12 @@ If our code helps your research or work, please consider citing our paper.
 The following are BibTeX references:
 
 ```
-@article{wu2023seesr,
-  title={SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution},
+@inproceedings{wu2024seesr,
+  title={Seesr: Towards semantics-aware real-world image super-resolution},
   author={Wu, Rongyuan and Yang, Tao and Sun, Lingchen and Zhang, Zhengqiang and Li, Shuai and Zhang, Lei},
-  journal={arXiv preprint arXiv:2311.16518},
-  year={2023}
+  booktitle={Proceedings of the IEEE/CVF conference on computer vision and pattern recognition},
+  pages={25456--25467},
+  year={2024}
 }
 ```
 
