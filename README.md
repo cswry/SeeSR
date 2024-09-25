@@ -218,7 +218,7 @@ The following are BibTeX references:
 ```
 
 ## 🎫 License
-This project is released under the [Apache 2.0 license](LICENSE).
+This project and related weights are released under the [Apache 2.0 license](LICENSE).
 
 
 <details>
