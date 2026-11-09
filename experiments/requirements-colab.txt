@@ -1,0 +1,21 @@
+# Inference environment for SeeSR experiments (Python 3.10, CUDA 11.8 wheels).
+# Pins follow upstream requirements.txt / cog.yaml; only packages that upstream
+# leaves unpinned or omits are pinned here, as resolved by `uv pip compile`.
+# Install with:  pip install -r experiments/requirements-colab.txt
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.0.1+cu118          # upstream requirements.txt
+torchvision==0.15.2+cu118   # imported by test_seesr.py; matches torch 2.0.1
+xformers==0.0.20            # built for torch 2.0.1; optional at runtime (enable_xformers: auto)
+diffusers==0.21.0           # upstream
+transformers==4.25.0        # upstream
+huggingface_hub==0.25.2     # diffusers 0.21 imports `cached_download`, removed in huggingface_hub 0.26
+accelerate==0.25.0          # cog.yaml
+loralib==0.1.2              # cog.yaml
+fairscale==0.4.13           # cog.yaml
+pydantic==1.10.11           # upstream
+timm==0.9.12                # cog.yaml
+einops==0.7.0               # cog.yaml
+scipy==1.10.1               # cog.yaml
+opencv-python==4.9.0.80     # cog.yaml
+numpy<2                     # torch 2.0.1 wheels are built against NumPy 1.x
+pyyaml

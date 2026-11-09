@@ -1,0 +1,2 @@
+# Keep shell scripts runnable on Linux/Colab even when checked out on Windows.
+*.sh text eol=lf

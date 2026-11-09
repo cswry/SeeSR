@@ -1,0 +1,7 @@
+# Experiment outputs are large and machine-specific; keep only the folders.
+results/*
+!results/.gitkeep
+logs/*
+!logs/.gitkeep
+__pycache__/
+.pytest_cache/

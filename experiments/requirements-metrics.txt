@@ -1,0 +1,6 @@
+# Evaluation metrics. Install INTO the inference environment, after
+# requirements-colab.txt. pyiqa 0.1.10 is the newest release whose dependency
+# ranges accept the pinned stack (torch 2.0.1, transformers 4.25.0, timm 0.9.12);
+# newer pyiqa releases require transformers>=4.37 and timm>=1.0.
+pyiqa==0.1.10
+setuptools<81   # pyiqa -> openai-clip imports pkg_resources, removed in setuptools 81
