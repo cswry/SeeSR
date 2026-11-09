@@ -1,0 +1,126 @@
+# Track B: controlled sampling comparison and method ablations.
+#   variants  x  DDPM steps {50, 30, 20}  x  seeds {42, 123, 2026}
+#
+# Every run uses runtime.reseed_per_image: true: before each image, the pipeline generator and
+# the global RNG are set to image_seed(seed, image name), so for a given (image, seed) the
+# starting noise is the same for every variant and step count. Between runs, only the variant's
+# `method` section, num_inference_steps and seed differ; tools/compare_results.py pairs runs by
+# (image, seed) and rejects runs that differ in anything else.
+#
+# The upstream-seeded 50-step run (baseline.yaml, track A) is NOT part of this comparison; it only
+# serves the reproduction check against published numbers.
+#
+# Start small, then expand (finished runs are skipped by the notebook):
+#   --variants original --seeds 42         step-count comparison of the original method
+#   --seeds 42                              the four default variants, one seed
+#   (no filter)                             default variants x all seeds
+#   --variants all                          also the alternative schedule and the SSR variants
+#
+# Spatial semantic reliability (SSR) variants are NOT in default_variants. Run them only after the
+# Gate 0 attention-localisation check (tools/gate0_attention.py) returns GO, and first as the small
+# screening experiment described in experiments/README.md:
+#   spatial_sem         SSR alone (component A off; lowers the soft prompt only where DAPE is less reliable)
+#   semantic_spatial    A + SSR: same mean strength as semantic_conf, redistributed in space
+#   combined_spatial    A + B + SSR
+#   spatial_shuffled    control for semantic_spatial: same map values, randomly permuted cells
+#   global_meanmatched  control for spatial_sem: one scalar equal to the map's mean (no spatial arrangement)
+#
+# Method parameters are documented in cfa_seesr/README.md. Values below are initial, untuned
+# settings chosen by stated rules, not fitted to any test set:
+#   min_confidence 0.731 = sigmoid(1): keep a tag only if its log-odds exceed the class
+#     threshold by at least 1 (odds at least e times the threshold odds).
+#   soft_scale_min 0.5: at zero reliability the soft-prompt residual is halved, never removed.
+#   SSR contrast (lambda) 1.0 and smoothing sigma 1 cell: a reliability difference of 0.1 between a
+#     region and the image mean changes that region's map value by 0.1; untuned.
+#   LR schedule 1.25 -> 0.75 (gamma 1): mean factor over the executed timesteps is about 1.0
+#     (recorded per run), so the schedule redistributes ControlNet guidance over time instead of
+#     changing its total amount; the reversed schedule tests the direction of the effect.
+#
+# No alternative scheduler (DDIM, DPM-Solver++, UniPC) is used: compatibility with
+# pipelines/pipeline_seesr.py has not been verified. With start_steps fixed at 999 the first
+# executed timestep is 981 / 958 / 951 for 50 / 30 / 20 steps; the wrapper records it.
+
+base_config: baseline.yaml
+
+default_variants: [original, semantic_conf, lr_schedule, combined]
+
+grid:
+  name_template: "{variant}_ddpm{num_inference_steps}_s{seed}"
+  description: "{variant}: DDPM {num_inference_steps} steps, per-image seeding, base seed {seed}."
+  fixed:
+    runtime.reseed_per_image: true
+  variants:
+    original: {}                                   # SeeSR as released (both components off)
+    semantic_conf:                                 # Component A only
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+    lr_schedule:                                   # Component B only: early-strong, late-weaker
+      method.lr_guidance.enabled: true
+      method.lr_guidance.schedule: power
+      method.lr_guidance.scale_start: 1.25
+      method.lr_guidance.scale_end: 0.75
+      method.lr_guidance.gamma: 1.0
+    combined:                                      # A + B
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+      method.lr_guidance.enabled: true
+      method.lr_guidance.schedule: power
+      method.lr_guidance.scale_start: 1.25
+      method.lr_guidance.scale_end: 0.75
+      method.lr_guidance.gamma: 1.0
+    lr_schedule_late:                              # alternative schedule (ablation): early-weaker, late-strong
+      method.lr_guidance.enabled: true
+      method.lr_guidance.schedule: power
+      method.lr_guidance.scale_start: 0.75
+      method.lr_guidance.scale_end: 1.25
+      method.lr_guidance.gamma: 1.0
+    spatial_sem:                                   # SSR alone (A off; SSR range 0.5..1)
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+      method.spatial_semantic.soft_scale_min: 0.5
+      method.spatial_semantic.soft_scale_max: 1.0
+    semantic_spatial:                              # A + SSR
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+    combined_spatial:                              # A + B + SSR
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+      method.lr_guidance.enabled: true
+      method.lr_guidance.schedule: power
+      method.lr_guidance.scale_start: 1.25
+      method.lr_guidance.scale_end: 0.75
+      method.lr_guidance.gamma: 1.0
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+    spatial_shuffled:                              # control: semantic_spatial with permuted map cells
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+      method.spatial_semantic.control: shuffled
+    global_meanmatched:                            # control: spatial_sem collapsed to its mean
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+      method.spatial_semantic.soft_scale_min: 0.5
+      method.spatial_semantic.soft_scale_max: 1.0
+      method.spatial_semantic.control: mean_matched
+  axes:
+    inference.num_inference_steps: [50, 30, 20]
+    inference.seed: [42, 123, 2026]

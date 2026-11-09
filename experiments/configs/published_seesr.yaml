@@ -1,0 +1,11 @@
+# SeeSR results as published, used only to sanity-check the reproduced 50-step baseline.
+# Source: Wu et al., "SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution",
+# CVPR 2024, arXiv:2311.16518v2, Table 2 (SeeSR column). Transcribed by hand; check
+# against the PDF before quoting. The paper reports PSNR/SSIM on the Y channel of YCbCr
+# and LPIPS-Alex, with RealSR/DRealSR LR center-cropped to 128x128 (StableSR protocol).
+# It does not state which metric library was used, so small differences are expected.
+source: "arXiv:2311.16518v2, Table 2"
+datasets:
+  RealSR:   {psnr: 25.18, ssim: 0.7216, lpips: 0.3009, dists: 0.2223, musiq: 69.77, clipiqa: 0.6612}
+  DRealSR:  {psnr: 28.17, ssim: 0.7691, lpips: 0.3189, dists: 0.2315, musiq: 64.93, clipiqa: 0.6804}
+  RealLR200: {musiq: 69.71, clipiqa: 0.6813}

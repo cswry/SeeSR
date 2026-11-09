@@ -1,0 +1,114 @@
+# Original SeeSR inference setup, expressed as an experiment config.
+#
+# Provenance tags used below:
+#   [upstream]  value copied from test_seesr.py argparse defaults or
+#               scripts/test_seesr.sh at upstream commit b13b8ac. The test
+#               suite (experiments/tests/test_configs.py) checks every
+#               `inference` value against the argparse defaults.
+#   [exp]       experiment-specific choice made by this framework.
+#   [user]      must be set by you (paths depend on your storage layout).
+#
+# Relative paths are resolved against the repository root.
+
+experiment:
+  name: baseline_ddpm50                       # [exp]
+  description: Original SeeSR, DDPM, 50 steps, upstream defaults.
+
+models:
+  # [upstream] locations used by scripts/test_seesr.sh. [user] place the
+  # downloaded weights there (or symlink preset/models to Google Drive).
+  pretrained_model_path: preset/models/stable-diffusion-2-base
+  seesr_model_path: preset/models/seesr
+  ram_ft_path: preset/models/DAPE.pth
+  # [upstream] hard-coded in test_seesr.load_tag_model(); NOT configurable
+  # without editing upstream code. Listed here so the wrapper can check that it
+  # exists before loading anything.
+  ram_pretrained_path: preset/models/ram_swin_large_14m.pth
+
+dataset:
+  name: RealSR                                # [user]
+  split: test                                 # [user]
+  lr_dir: preset/datasets/RealSR/test_LR      # [user] input LR images only
+  gt_dir: preset/datasets/RealSR/test_HR      # [user] null for unpaired sets (RealLR200)
+  # [exp] suffixes removed from filename stems before SR/GT matching,
+  # e.g. ["_LR4", "_HR"] for the original RealSR naming. Empty = exact stems.
+  strip_suffixes: []
+
+inference:
+  # Every key below is passed to upstream test_seesr.main() unchanged.
+  prompt: ""                                  # [upstream] argparse default. NOTE: scripts/test_seesr.sh passes
+                                              #   "None", which inserts the literal word into every prompt.
+  added_prompt: "clean, high-resolution, 8k"  # [upstream]
+  negative_prompt: "dotted, noise, blur, lowres, smooth"  # [upstream]
+  mixed_precision: fp16                       # [upstream] no | fp16 | bf16
+  guidance_scale: 5.5                         # [upstream]
+  conditioning_scale: 1.0                     # [upstream]
+  blending_alpha: 1.0                         # [upstream] parsed but unused by upstream code
+  num_inference_steps: 50                     # [upstream]
+  process_size: 512                           # [upstream]
+  vae_decoder_tiled_size: 224                 # [upstream] latent size ("for 24G" in upstream comment)
+  vae_encoder_tiled_size: 1024                # [upstream] image size ("for 13G" in upstream comment)
+  latent_tiled_size: 96                       # [upstream]
+  latent_tiled_overlap: 4                     # [upstream]
+  upscale: 4                                  # [upstream]
+  seed: 42                                    # [exp] upstream default is null (unseeded)
+  sample_times: 1                             # [upstream]
+  align_method: adain                         # [upstream] wavelet | adain | nofix
+  start_steps: 999                            # [upstream] NOT forwarded by test_seesr.main(); the pipeline
+                                              #   always uses its own default (999). Wrapper rejects other values.
+  start_point: lr                             # [upstream] LR-embedded start (LRE)
+  save_prompts: true                          # [exp] upstream default false; only writes prompt .txt files
+
+runtime:
+  # [upstream] test_seesr.main() hard-codes the DDPMScheduler loaded from
+  # <pretrained_model_path>/scheduler. Recorded for provenance; the wrapper
+  # refuses any other value because no alternative has been verified.
+  scheduler: DDPMScheduler
+  # [upstream] main() defaults to true and raises if xformers is missing.
+  # true | false | auto  (auto = xformers if importable, else PyTorch SDPA).
+  # SDPA is numerically different from xformers; the backend used is recorded.
+  enable_xformers: true
+  # [upstream] false: upstream seeds ONE generator once, so the noise used for image k depends on
+  # every earlier image and on how many DDPM steps each consumed (DDPMScheduler.step draws noise
+  # every step). true: [exp] before each image, reseed the generator and the global RNG with
+  # image_seed(seed, image name), making an image's noise identical across step counts and
+  # subsets. Used by sampling_sweep.yaml (track B); keep false here (track A, reproduction).
+  reseed_per_image: false
+
+method:
+  # Confidence- and Fidelity-Aware SeeSR (cfa_seesr/). [exp] All components are disabled here, so no hook
+  # is installed and upstream code runs unchanged. Variants in sampling_sweep.yaml enable them.
+  semantic_confidence:
+    enabled: false
+    temperature: 1.0          # T, log-odds units of the margin z_i - logit(tau_i)
+    min_confidence: 0.5       # c_min; 0.5 reproduces upstream tag selection
+    soft_scale_min: 1.0       # s_min; s_min = s_max = 1 leaves the soft-prompt pathway unchanged
+    soft_scale_max: 1.0       # s_max
+    aggregate: mean           # mean | min over the upstream tag set
+  lr_guidance:
+    enabled: false
+    schedule: constant        # constant | power
+    scale_start: 1.0          # factor at t = T (start of sampling)
+    scale_end: 1.0            # factor at t = 0
+    gamma: 1.0
+  spatial_semantic:           # spatial semantic reliability (cfa_seesr/spatial_reliability.py)
+    enabled: false
+    contrast: 0.0             # lambda; 0 = no spatial redistribution (component A / upstream unchanged)
+    smoothing_sigma: 1.0      # Gaussian sigma on DAPE's 12x12 attention grid, in cells
+    attention_layer: -1       # tagging-head layer whose cross-attention is read (-1 = last)
+    soft_scale_min: 0.5       # used only when semantic_confidence is disabled
+    soft_scale_max: 1.0       # used only when semantic_confidence is disabled
+    temperature: 1.0          # c_i temperature, used only when semantic_confidence is disabled
+    control: none             # none | shuffled | mean_matched (ablation controls)
+    shuffle_seed: 0
+
+output:
+  results_root: experiments/results           # [user] e.g. /content/drive/MyDrive/seesr_experiments on Colab
+
+evaluation:
+  paired_metrics: [psnr, ssim, lpips, dists]  # [exp] need gt_dir
+  noref_metrics: [musiq, clipiqa]             # [exp]
+  # [exp] PSNR/SSIM on the Y channel of YCbCr, no border crop. Change here, not in code,
+  # and keep it identical across every experiment you compare.
+  y_channel: true
+  crop_border: 0
