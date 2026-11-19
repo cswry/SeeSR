@@ -1,0 +1,73 @@
+# CFA-SeeSR V2: SFR-OC strength screening (run BEFORE the full v2_ablation.yaml evaluation).
+#
+# Data: the SCREENING subset only (20 RealSR + 20 DRealSR images, hash-selected; experiments/README.md §5a),
+# never the final test images. Identical images, seed (42), per-image seeding, checkpoints, CFG, precision and
+# post-processing in every run; only method.sfr_oc.strength differs between the v2_heur_sem_g* variants.
+#
+#   original            SeeSR as released                        (reference for absolute numbers)
+#   combined_spatial    CFA-SeeSR V1 = A + B + SSR               (reference for the paired comparison)
+#   v2_heur_sem_g025        v2_heur_sem (training-free, heuristic O fused with S) with strength 0.25
+#   v2_heur_sem_g050        v2_heur_sem (training-free, heuristic O fused with S) with strength 0.50
+#   v2_heur_sem_g100        v2_heur_sem (training-free, heuristic O fused with S) with strength 1.00
+#
+# The selection rule is fixed in advance in tools/sfroc_screening.py (docstring) and applied by that tool:
+# it reads LPIPS, DISTS, PSNR, SSIM (eval/paired_per_image.csv), the map statistics and the SFR-OC runtime
+# (per_image.csv) of these runs and writes the selected strength. That value is then used for v2_ablation.yaml.
+# Nothing is selected on the final evaluation set.
+#
+#   python experiments/run_inference.py --sweep experiments/configs/v2_strength_screening.yaml \
+#       --results_root <R>/v2_screening/RealSR --set dataset.lr_dir=<screening LR> --set dataset.gt_dir=<GT>
+#   (evaluate every run as usual, then)
+#   python experiments/tools/sfroc_screening.py --results_root RealSR=<R>/v2_screening/RealSR \
+#       --results_root DRealSR=<R>/v2_screening/DRealSR --output <R>/v2_screening/sfroc_screening.json
+#
+# Variant names do not collide with v2_ablation.yaml , so both can share a results root.
+
+base_config: baseline.yaml
+
+default_variants: [original, combined_spatial, v2_heur_sem_g025, v2_heur_sem_g050, v2_heur_sem_g100]
+
+grid:
+  name_template: "{variant}_ddpm{num_inference_steps}_s{seed}"
+  description: "SFR-OC strength screening {variant}: DDPM {num_inference_steps} steps, base seed {seed}."
+  fixed:
+    runtime.reseed_per_image: true
+  variants:
+    original: {}
+    combined_spatial: &v1
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+      method.lr_guidance.enabled: true
+      method.lr_guidance.schedule: power
+      method.lr_guidance.scale_start: 1.25
+      method.lr_guidance.scale_end: 0.75
+      method.lr_guidance.gamma: 1.0
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+    v2_heur_sem_g025:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.25
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+    v2_heur_sem_g050:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+    v2_heur_sem_g100:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 1.0
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+  axes:
+    inference.num_inference_steps: [20, 50]
+    inference.seed: [42]

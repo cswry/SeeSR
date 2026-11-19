@@ -1,0 +1,40 @@
+%% SFR-OC internal data flow (cfa_seesr/observation_reliability.py, lornet.py, frequency.py,
+%% observation_consistency.py, hooks.MethodHooks.install_observation_consistency). Inference only.
+%% Orange = V2 code, light grey = upstream tensors/calls, blue = V1, green = LORNet (trained offline, frozen here).
+flowchart TB
+  classDef up fill:#f6f6f6,stroke:#999,color:#111
+  classDef v2 fill:#ffe2c6,stroke:#c25e00,color:#111
+  classDef v1 fill:#dbe9ff,stroke:#2a5db0,color:#111
+  classDef trained fill:#d7f5d0,stroke:#2e8b2e,stroke-width:2px,color:#111
+
+  subgraph ONCE["once per pipeline call: prepare_image wrapper"]
+    IMG["conditioning image 2x3xHxW (CFG copies)"]:::up --> CHK["deferred check: copies identical; use item 0"]:::v2
+    LRI["original LR image (runner)"]:::up --> NS["noise: Immerkaer MAD on low-gradient pixels<br/>(white model; without LR: empirical floors)"]:::v2
+    NS --> IND["indicators from x_s = max(x - kappa_k f_k, 0)<br/>SNR = x_s / (x_s + kappa_k f_k + a_k)<br/>edge, band energy, contrast, noise share, sharpness"]:::v2
+    IND --> OH["O_heuristic = weighted mean, smoothed, resized to h x w"]:::v2
+    CHK --> LN["LORNet(item 0) -> O_learned at h x w"]:::trained
+    OH --> OSEL["O = heuristic | learned | blend b O_l + (1-b) O_h"]:::v2
+    LN --> OSEL
+    SMAP["SSR map at latent res, or C, or 0.5"]:::v1 --> FU
+    OSEL --> FU["W = clip(w_obs O + w_sem (1 - S) + bias)<br/>controls: uniform, mean_matched (W = mean W),<br/>shuffled (row/column band permutation)"]:::v2
+  end
+
+  subgraph ENC["pipeline LR-start encode, captured by the vae.encode wrapper"]
+    VE["vae.encode(2 image - 1)"]:::up --> ZR["z_lr = posterior mean[0:1] x scaling_factor<br/>deferred check: CFG rows identical"]:::v2
+  end
+
+  subgraph STEP["every scheduler.step(model_output, t, x_t)"]
+    TH["t from host copy of scheduler.timesteps<br/>(deferred device check t == passed t)"]:::v2 --> G["gamma(t) = strength f(t/T)"]:::v2
+    G -->|"gamma = 0"| PASS["original step, original arguments: exact no-op"]:::up
+    G -->|"gamma > 0"| X0["x0 from model_output (float32)<br/>epsilon / v_prediction / sample"]:::v2
+    X0 --> R["r = z_lr - x0"]:::v2
+    ZR --> R
+    R --> L1["LPF_h(r): Gaussian sigma/sqrt2 or FFT cutoff, reflect-padded"]:::v2
+    FU --> MUL["W * LPF_h(r)"]:::v2
+    L1 --> MUL
+    MUL --> L2["Delta = gamma LPF_h(W * LPF_h(r))<br/>(band full: gamma W r)"]:::v2
+    X0 -.-> ORIG["original scheduler.step(model_output, t, x_t)<br/>same dtype, same RNG draw"]:::up
+    ORIG --> OUT["x_t-1' = x_t-1 + c0(t) Delta (float32, cast back)<br/>DDPM c0 = sqrt(a_prev) beta_t / (1 - a_t)<br/>DDIM c0 = sqrt(a_prev) - sqrt(1 - a_prev - s^2) sqrt(a_t / (1 - a_t))"]:::v2
+    L2 --> OUT
+    OUT --> DIAG["diagnostics stay on device; CUDA-event timing;<br/>converted once in summary() after the call"]:::v2
+  end

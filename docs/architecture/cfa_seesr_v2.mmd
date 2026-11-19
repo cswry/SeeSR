@@ -1,0 +1,38 @@
+%% CFA-SeeSR V2 complete inference architecture (cfa_seesr/hooks.py attaches everything; inference only).
+%% Dashed grey = frozen pretrained networks, light grey = upstream code, blue = V1, orange = V2 inference code,
+%% green = LORNet (trained offline, loaded frozen from a validated checkpoint; diagram D shows its training).
+flowchart LR
+  classDef frozen fill:#e3e3e3,stroke:#444,stroke-width:2px,stroke-dasharray:5 3,color:#111
+  classDef up fill:#f6f6f6,stroke:#999,color:#111
+  classDef v1 fill:#dbe9ff,stroke:#2a5db0,color:#111
+  classDef v2 fill:#ffe2c6,stroke:#c25e00,color:#111
+  classDef trained fill:#d7f5d0,stroke:#2e8b2e,stroke-width:2px,color:#111
+
+  LR["LR image (original)"]:::up --> UPS["upstream resize x4, floor 8"]:::up --> PREP["prepare_image<br/>conditioning image 0..1, CFG x2"]:::up
+  LR --> DAPE["DAPE one pass (frozen)"]:::frozen
+  DAPE --> A["V1-A: semantic confidence C"]:::v1
+  DAPE --> SSR["V1-SSR: map R"]:::v1
+  A --> SSR
+  A --> CLIP["hard prompt -> CLIP (frozen)"]:::frozen
+  DAPE --> SOFT["soft prompt + V1 scaling hook"]:::v1
+  PREP --> CN["ControlNet (frozen)<br/>+ V1-B: LR schedule f(t)"]:::frozen
+  LR -->|"noise estimate on the original LR"| HEUR["V2: heuristic O<br/>noise-compensated indicators"]:::v2
+  PREP --> HEUR
+  PREP -->|"item 0 (CFG copies checked)"| LOR["LORNet O<br/>checkpoint, no grad"]:::trained
+  HEUR --> SEL{"reliability<br/>heuristic / learned / blend"}:::v2
+  LOR --> SEL
+  PREP --> VAEE["VAE encode for the LR start (frozen)<br/>posterior captured by V2"]:::frozen
+  SSR -->|"S at latent res"| FUSE["V2: fusion W<br/>fused / observation / uniform<br/>mean_matched / shuffled"]:::v2
+  A -->|"C when SSR off"| FUSE
+  SEL -->|"O at latent res"| FUSE
+  VAEE -->|"z_lr = posterior mean x scaling_factor"| DELTA
+  CLIP --> UNET["UNet (frozen)"]:::frozen
+  SOFT --> UNET
+  CN --> UNET
+  UNET --> CFG["CFG"]:::up --> STEP["scheduler.step unchanged<br/>DDPM / DDIM, original model output"]:::up
+  CFG -->|"model output, x_t"| DELTA["V2: Delta = gamma(t) LPF_h(W * LPF_h(z_lr - x0))"]:::v2
+  FUSE -->|"W"| DELTA
+  STEP --> ADD["V2: x_t-1 + c0(t) Delta<br/>(gamma = 0: untouched)"]:::v2
+  DELTA --> ADD
+  ADD -->|"x_t-1"| UNET
+  ADD --> DEC["VAE decode (frozen) + colour fix"]:::frozen --> SR["SR image"]:::up

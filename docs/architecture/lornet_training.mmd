@@ -1,0 +1,36 @@
+%% Offline LORNet training (experiments/training/), separate from diffusion inference. Purple = training-only
+%% operations, dashed grey = frozen pretrained network, green = trainable. No gradient reaches SeeSR.
+flowchart LR
+  classDef frozen fill:#e3e3e3,stroke:#444,stroke-width:2px,stroke-dasharray:5 3,color:#111
+  classDef train fill:#eadcff,stroke:#6a3fb5,color:#111
+  classDef trained fill:#d7f5d0,stroke:#2e8b2e,stroke-width:2px,color:#111
+  classDef data fill:#f6f6f6,stroke:#999,color:#111
+
+  subgraph DATA["data and leakage guards (data.py)"]
+    PAIRS["RealSR V3 Train / DRealSR Train<br/>HR + LR pairs (matched stems)"]:::data --> GUARD["refuse test folders<br/>error on stems shared with evaluation folders"]:::train
+    GUARD --> SPLIT["hash split by image<br/>train / validation (10 %)"]:::train
+    SPLIT --> CROP["grid crops 512 HR / 128 LR<br/>LR at HR size downscaled x4"]:::train
+  end
+  subgraph CACHE["latent cache (train_lornet.py cache, once)"]
+    CROP --> COND["upstream resize of the LR crop<br/>(as test_seesr.py)"]:::train
+    COND --> VAE1["VAE encoder (frozen, no grad, fp16)<br/>posterior mean x scaling_factor"]:::frozen
+    CROP -->|"HR crop"| VAE1
+    VAE1 --> E["E = LocalAverage3 mean_c |LPF(z_lr - z_hr)|"]:::train
+    E --> TAU["tau = median(E_train) / ln 2<br/>(training split only)"]:::train
+    E --> STORE["cache: LR crop uint8 + E fp16<br/>manifest: split digests, tau"]:::train
+  end
+  subgraph FIT["training (train_lornet.py train)"]
+    STORE --> AUG["flips / transpose<br/>(image and map together)"]:::train
+    AUG --> NET["LORNet"]:::trained
+    TAU --> TGT["R = exp(-E / tau)"]:::train
+    NET --> LOSS["Charbonnier(pred, R) + 0.05 TV(pred)<br/>AdamW, cosine, fp16 autocast"]:::train
+    TGT --> LOSS
+    LOSS -->|"gradients to LORNet only"| NET
+  end
+  subgraph SEL["selection and evaluation"]
+    LOSS --> VAL["validation loss each epoch<br/>early stopping (patience 8)"]:::train
+    VAL --> BEST["best.pt = lowest validation loss<br/>format, version, config, tau, provenance"]:::train
+    BEST --> EV["evaluate: MAE, Spearman, ECE, quartile E<br/>heuristic O on the same crops"]:::train
+    BEST --> SCR["make_screening_set.py<br/>validation images for V2 screening"]:::train
+  end
+  BEST ==>|"validated at load; used frozen at inference"| INF["SFR-OC reliability: learned / blend"]:::trained

@@ -62,8 +62,12 @@ inference:
 runtime:
   # [upstream] test_seesr.main() hard-codes the DDPMScheduler loaded from
   # <pretrained_model_path>/scheduler. Recorded for provenance; the wrapper
-  # refuses any other value because no alternative has been verified.
+  # refuses any other value.
   scheduler: DDPMScheduler
+  # [exp] null for every main experiment. Only the separate efficiency experiment (efficiency_sweep.yaml)
+  # sets DDIMScheduler or DPMSolverMultistepScheduler: the wrapper then replaces the loaded DDPMScheduler
+  # with Class.from_config(<same config>). Their effect on quality is unknown until measured.
+  sampler_override: null
   # [upstream] main() defaults to true and raises if xformers is missing.
   # true | false | auto  (auto = xformers if importable, else PyTorch SDPA).
   # SDPA is numerically different from xformers; the backend used is recorded.
@@ -101,6 +105,48 @@ method:
     temperature: 1.0          # c_i temperature, used only when semantic_confidence is disabled
     control: none             # none | shuffled | mean_matched (ablation controls)
     shuffle_seed: 0
+  sfr_oc:                     # V2: frequency-selective observation consistency (cfa_seesr/observation_consistency.py)
+    enabled: false            # [exp] off: no hook is installed
+    strength: 0.0             # gamma_max in [0, 1]; 0 = exact no-op (control); v2_ablation.yaml uses 0.5 (untuned)
+    band: low                 # low: Delta = gamma * LPF_h(W * LPF_h(z_lr - x0)) | full: gamma * W * (z_lr - x0)
+    lowpass: gaussian         # gaussian (sigma, latent px) | fft (cutoff, fraction of Nyquist)
+    sigma: 3.0                # Gaussian std, latent px (composite of the two passes). Smooth roll-off, not a
+                              # band limit: half amplitude at a period of ~16 latent px = ~128 output px (x8 VAE)
+    cutoff: 0.25
+    schedule: power           # constant | power: (t/T)^power | window: 1 inside [t_min, t_max]
+    power: 1.0
+    t_min: 0                  # no correction below this timestep
+    t_max: 1000
+    reference: auto           # auto: reuse the pipeline's own LR encode (start_point lr) | extra_encode
+    precision: output         # output: step(model_output) + c0(t)*Delta (dtype and RNG as V1) | output_carry:
+                              # + fp32 error feedback of the fp16 rounding | model_output: legacy eps' rewrite
+    profile: false            # explicit synchronisation around the timed sections (benchmarks only)
+    save_maps: true           # observation_maps.npz (W, O, indicators at latent resolution)
+    reliability: heuristic    # O from: heuristic (observation_reliability.py) | learned (LORNet) | blend
+    learned:                  # LORNet (cfa_seesr/lornet.py); only read when reliability is learned or blend
+      checkpoint: null        # trained checkpoint (experiments/training/train_lornet.py); required, validated
+      blend: 0.5              # blend: O = blend * O_LORNet + (1 - blend) * O_heuristic
+    observation:              # part A: local observation-reliability analyzer (heuristic, per image)
+      analysis_scale: 4       # area-downsample the conditioning image by this factor (x4 SR: back to LR grid)
+      window: 7
+      weights: {edge_coherence: 1.0, frequency_energy: 1.0, contrast: 1.0, noise: 1.0, sharpness: 1.0}
+      reference_level: 0.02   # absolute normalisation level (luminance std); no per-image rescaling
+      significance: 2.0       # z of the noise-subtraction margin kappa_k = 1 + z * rel. std of statistic k
+      smoothing_sigma: 1.0
+      low_gradient_quantile: 0.5  # noise estimate: Immerkaer residual on the flattest half of the original LR
+      noise_floor: 0.00392156862745098   # 1/255: quantisation floor added to the noise variance
+      presmooth_sigma: 1.0    # sharpness indicator measured after this light Gaussian pre-smoothing
+    fusion:                   # part C: W = clip(w_observation*O + w_semantic*(1 - S) + bias, w_min, w_max)
+      map: fused              # fused | mean_matched (W = mean of fused, control) | uniform (W = 1) | observation | semantic
+      w_observation: 0.5
+      w_semantic: 0.5
+      bias: 0.0
+      w_min: 0.0
+      w_max: 1.0
+      semantic_default: 0.5   # S when neither component A nor SSR is active
+      control: none           # none | shuffled (W permuted in row/column bands: same values, other places)
+      shuffle_block: 8
+      shuffle_seed: 0
 
 output:
   results_root: experiments/results           # [user] e.g. /content/drive/MyDrive/seesr_experiments on Colab

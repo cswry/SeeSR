@@ -110,3 +110,50 @@ def test_ssr_sections_skip_without_go_and_subset_pairs_images(ns, tmp_path):
     assert len(lrs) == 3 and "im3.png" not in lrs                     # LR without GT is never chosen
     assert [g.replace("_HR", "") for g in gts] == lrs
     assert data == ns["screening_subset"]("RealSR", n=3)              # deterministic, idempotent
+
+
+def test_v2_and_efficiency_names_match_their_sweeps(ns):
+    src = _cell("def v2_names(")
+    defs = src.split("run_v2(\"RealSR\")")[0]                 # definitions only, no execution
+    exec(defs, ns)
+    v2 = {n for n, _ in load_sweep(REPO / "experiments" / "configs" / "v2_ablation.yaml")}
+    ns["LORNET_CKPT"] = "/nonexistent/best.pt"                # no checkpoint: training-free subset
+    free = ns["v2_names"]([42, 123, 2026])
+    assert set(free) <= v2 and len(free) == len(ns["V2_TRAINING_FREE"]) * 3 * 3
+    learned = ns["v2_names"]([42, 123, 2026], ns["V2_VARIANTS"])
+    assert set(learned) <= v2 and len(learned) == len(ns["V2_VARIANTS"]) * 3 * 3 == 90
+    from experiments.common import sweep_default_variants
+    assert ns["V2_VARIANTS"] == sweep_default_variants(REPO / "experiments" / "configs" / "v2_ablation.yaml")
+    from cfa_seesr import MethodConfig
+    runs = dict(load_sweep(REPO / "experiments" / "configs" / "v2_ablation.yaml"))
+    assert not any(MethodConfig.from_dict(runs[n]["method"]).sfr_oc.uses_learned for n in free)
+    scr = _cell("def run_v2_screening(")
+    screening = {n for n, _ in load_sweep(REPO / "experiments" / "configs" / "v2_strength_screening.yaml")}
+    listed = set(re.findall(r'"((?:original|combined_spatial|v2_heur_sem_g\d+))"', scr))
+    assert {f"{v}_ddpm{st}_s42" for v in listed for st in (20, 50)} == screening
+    eff_src = _cell("def run_efficiency(")
+    eff = {n for n, _ in load_sweep(REPO / "experiments" / "configs" / "efficiency_sweep.yaml")}
+    listed = set(re.findall(r'"(original_[a-z]+\d+_s42)"', eff_src))
+    assert listed == eff
+
+
+TRAIN_NB = REPO / "experiments" / "notebooks" / "lornet_training.ipynb"
+
+
+def test_training_notebook_paths_and_handoff():
+    text = TRAIN_NB.read_text(encoding="utf-8")
+    nb = json.loads(text)
+    for rel in set(re.findall(r"experiments/[\w/.-]+\.(?:py|yaml|sh|txt)", text)):
+        assert (REPO / rel).exists(), rel
+    src = "".join("".join(c["source"]) for c in nb["cells"] if c["cell_type"] == "code")
+    ns = {}
+    cfg_cell = next("".join(c["source"]) for c in nb["cells"] if "LORNET_OUT =" in "".join(c["source"]))
+    exec(cfg_cell.split("def sh(")[0], ns)
+    eval_ns = {}
+    with mock.patch.dict(os.environ):
+        exec(_cell("DRIVE_ROOT ="), eval_ns)
+    # the evaluation notebook reads exactly what the training notebook writes
+    assert eval_ns["LORNET_CKPT"] == f"{ns['LORNET_OUT']}/checkpoints/best.pt"
+    assert eval_ns["V2_SCREEN_DATA"] == ns["V2_SCREEN_DATA"]
+    assert all("Test" not in s["hr_dir"] and "test" not in s["lr_dir"] for s in ns["TRAIN_SOURCES"])
+    assert "train_lornet.py cache" in src and "train_lornet.py train" in src and "make_screening_set.py" in src

@@ -23,6 +23,9 @@ experiments/
   configs/
     baseline.yaml           original SeeSR settings (each value tagged upstream / exp / user); method disabled
     sampling_sweep.yaml     track B grid: method variants × 50 / 30 / 20 DDPM steps × seeds, per-image seeding
+    v2_ablation.yaml        V2 hybrid ablation grid (SFR-OC, heuristic / LORNet reliability), track-B protocol (5b)
+    v2_strength_screening.yaml  V2: SFR-OC strength 0.25 / 0.5 / 1.0 on held-out validation images (5b)
+    efficiency_sweep.yaml   separate sampler experiment: DDPM vs DDIM vs DPM-Solver++ at fewer steps (section 5c)
     published_seesr.yaml    SeeSR paper values (Table 2), for the reproduction check only
   evaluation/
     evaluate.py             paired (PSNR, SSIM, LPIPS, DISTS), no-reference (MUSIQ, CLIPIQA), LR consistency
@@ -35,8 +38,14 @@ experiments/
     analyze_tag_confidence.py   does DAPE's confidence score rank tag reliability? (component A check)
     gate0_attention.py      Gate 0: does DAPE's tagging attention localise its tags? (decides whether SSR is used)
     ssr_screening.py        SSR screening decision (CONTINUE / STOP) from the 40-image screening runs
+    benchmark_sfroc.py      V2: SFR-OC / LORNet module cost on synthetic inputs, separate from the pipeline
+    sfroc_screening.py      V2: pre-registered strength selection from the screening runs
+    sfroc_map_validity.py   V2: do the maps predict where the LR correction lowers the latent error? (V1 outputs)
+  training/                 V2: LORNet training (README.md there): data/leakage rules, latent cache, train,
+                            evaluate, make_screening_set.py, configs/lornet.yaml
   notebooks/
-    seesr_evaluation.ipynb  Colab: GPU check, pinned env, validation, smoke tests, tracks A and B, evaluation
+    seesr_evaluation.ipynb  Colab: GPU check, pinned env, validation, smoke tests, tracks A and B, evaluation, V2
+    lornet_training.ipynb   Colab (T4): LORNet cache / train / evaluate, V2 screening images
   scripts/
     run_inference.sh        baseline | sweep, with log files
     run_evaluation.sh       evaluate several finished experiments
@@ -49,7 +58,7 @@ experiments/
 | | |
 |---|---|
 | Python | **3.10** (upstream `.pyc` files are cpython-310; torch 2.0.1 has no wheels for Python ≥ 3.12, Colab's default) |
-| GPU | NVIDIA with CUDA 11.8 driver support. L4 (24 GB) is the target; A100 works unchanged |
+| GPU | NVIDIA with CUDA 11.8 driver support. T4 (16 GB) runs the fp16 defaults; L4 / A100 are faster |
 | Inference stack | torch 2.0.1+cu118, torchvision 0.15.2, xformers 0.0.20, diffusers 0.21.0, transformers 4.25.0 |
 | Extra pins found necessary | `huggingface_hub==0.25.2` (diffusers 0.21 imports `cached_download`, removed in 0.26); `numpy<2`; `setuptools<81` for pyiqa's CLIP dependency |
 | Metrics | pyiqa 0.1.10 (the newest version compatible with transformers 4.25 / timm 0.9.12) |
@@ -248,6 +257,78 @@ Useful metrics per component: A, tag F1 (`semantic_tags.py`), LPIPS, DISTS; B, P
 SSR, LPIPS and DISTS against `semantic_conf` / `original` and the two controls, with MUSIQ/CLIPIQA to catch
 blurring where the map is low.
 
+## 5b. V2: SFR-OC with heuristic or learned (LORNet) reliability
+
+Design, maths and limitations: `cfa_seesr/README.md` §12-13; diagrams: `docs/ARCHITECTURE.md`; related work:
+`docs/related_work_v2.md`. Order of work (each step only after the previous one):
+
+1. **Train LORNet** (`training/README.md`, `notebooks/lornet_training.ipynb`): training splits only; writes
+   `checkpoints/best.pt` and the V2 screening images (its *validation* split; never test images).
+2. **Screen the strength** on those images: `configs/v2_strength_screening.yaml` (original, V1, training-free fused
+   SFR-OC at γ = 0.25 / 0.5 / 1.0; 20 and 50 steps; seed 42), evaluate, then
+   `tools/sfroc_screening.py` (rule fixed in its docstring: largest mean ΔPSNR vs V1 with ΔLPIPS and ΔDISTS
+   ≤ +0.005 in every cell; ties within 0.05 dB → smaller γ; none admissible → NONE, report and stop tuning).
+3. **Screen the maps**: `tools/sfroc_map_validity.py` on the V1 screening outputs (frozen VAE; counterfactual benefit
+   of the low-frequency LR correction; Spearman and quartile contrast with bootstrap CIs over images). If no fused
+   map is SUPPORTED, spatial fusion is unsupported and `v2_uniform` stays the candidate.
+4. **Ablation** `configs/v2_ablation.yaml` with the selected strength and the one checkpoint:
+
+| # | variant | reliability O | map W | notes |
+|---|---|---|---|---|
+| 1 | `original` | – | – | SeeSR as released (same run as track B) |
+| 2 | `combined_spatial` | – | – | V1 = A + B + SSR (same run as track B) |
+| 3 | `v2_heur` | heuristic | O | |
+| 4 | `v2_learned` | LORNet | O | |
+| 5 | `v2_heur_sem` | heuristic | fuse(O, S) | training-free V2 |
+| 6 | `v2_learned_sem` | LORNet | fuse(O, S) | primary hybrid |
+| 7 | `v2_uniform` | – | 1 | |
+| 8 | `v2_meanmatched` | LORNet | mean of 6's W | same mean strength, no spatial variation |
+| 9 | `v2_shuffled` | LORNet | 6's W band-permuted | same values and mean, wrong places |
+| 10 | `v2_zero` | LORNet | 6's W | strength 0: must reproduce 2 exactly |
+
+All use Δ = γ·LPF_h(W ⊙ LPF_h(z_lr − x̂₀)). Optional: `v2_global`, `v2_spatial` (band full), `v2_heur_sem_meanmatched`,
+`v2_heur_sem_shuffled`, `v2_heur_sem_zero`, `v2_blend_sem`, `v2_sem_only`. Without a checkpoint run the training-free
+subset (`--variants original combined_spatial v2_heur v2_heur_sem v2_uniform v2_heur_sem_meanmatched
+v2_heur_sem_shuffled v2_heur_sem_zero`); the runner refuses learned variants without a valid checkpoint. If Gate 0 or
+the SSR screening said NO-GO, add `--set method.spatial_semantic.enabled=false` and use a separate results folder.
+
+```bash
+python experiments/run_inference.py --sweep experiments/configs/v2_ablation.yaml --seeds 42 \
+    --results_root $R/RealSR --set dataset.lr_dir=... --set dataset.gt_dir=... \
+    --set method.sfr_oc.strength=<selected> --set method.sfr_oc.learned.checkpoint=<best.pt>
+python experiments/tools/compare_results.py sampling --results_root $R/RealSR --dataset RealSR \
+    --experiments $(ls $R/RealSR | grep -E '^(original|combined_spatial|v2_)')
+```
+
+Paired comparisons (per image, bootstrap CIs; `compare_results.py` writes `paired_differences.csv`):
+`v2_learned_sem` vs `v2_heur_sem` (learned vs handcrafted), vs `v2_meanmatched` (spatial variation beyond the mean),
+vs `v2_shuffled` (placement); `v2_uniform` vs `v2_meanmatched` (mean level); every V2 variant vs V1. Metrics:
+PSNR/SSIM and the LR-consistency diagnostic (fidelity), LPIPS/DISTS (perceptual cost), MUSIQ/CLIPIQA (blurring);
+`diffusion_s`, `sfroc_*_ms`, peak VRAM and `denoising_steps` per image (cost). Module cost alone:
+`python experiments/tools/benchmark_sfroc.py --device cuda --lornet_checkpoint <best.pt> --output $R/benchmark_sfroc.json`.
+
+## 5c. Efficiency experiment (separate): alternative samplers
+
+`configs/efficiency_sweep.yaml` runs the original method with DDPM (50/20/10), DDIM (20/10) and DPM-Solver++ (20/10)
+steps, selected by `runtime.sampler_override` (`runtime.scheduler` stays the upstream DDPMScheduler and every main
+config keeps `sampler_override: null`). Compatibility with the upstream pipeline (step signature, generator, LRE
+`add_noise`, step count, determinism) is tested on the tiny pipeline; quality is what the experiment measures, so no
+sampler replaces DDPM without these results. SFR-OC supports DDPM and DDIM only (DPM-Solver++ is rejected).
+
+**Stochastic vs deterministic samplers.** DDPM adds fresh noise at every step; DDIM with η = 0 and DPM-Solver++ are
+deterministic given the start latent. With per-image seeding the *start* is identical across samplers, but the
+trajectories are not comparable sample by sample: a DDPM–DDIM difference mixes the effect of fewer steps with the
+removal of per-step noise (DDPM output varies with the seed, DDIM η = 0 much less). Report each sampler's seed spread
+(seeds 42 / 123 / 2026) next to its mean, compare samplers on distributions of metrics rather than on pixels, and do
+not read a lower variance of a deterministic sampler as a quality gain. SFR-OC's correction is exact for both (output
+space, DDIM with any η), but a V2 gain measured with one sampler is not evidence for the other.
+
+```bash
+python experiments/run_inference.py --sweep experiments/configs/efficiency_sweep.yaml --results_root $R/efficiency/RealSR ...
+python experiments/tools/compare_results.py sampling --allow_sampler_differences \
+    --results_root $R/efficiency/RealSR --dataset RealSR --reference_steps 50
+```
+
 ## 6. Evaluation
 
 ```bash
@@ -339,10 +420,20 @@ predicts the same tag, per bin and for tags kept or dropped by `c_min` (`tag_con
                            seed, peak_vram_mb, peak_vram_reserved_mb, hard_prompt; with a method enabled also
                            n_tags_upstream, n_tags_selected, semantic_reliability, soft_scale,
                            lr_factor_first/last/mean, controlnet_calls; with SSR ssr_mode, ssr_n_tags,
-                           ssr_mean/min/max, ssr_clip_low/high, ssr_coverage, ssr_tiled, ssr_controlnet_calls
+                           ssr_mean/min/max, ssr_clip_low/high, ssr_coverage, ssr_tiled, ssr_controlnet_calls;
+                           with SFR-OC sfroc_reference, sfroc_steps_corrected, sfroc_gamma_mean,
+                           sfroc_delta_abs_mean, sfroc_W_mean/min/max, sfroc_O_mean, sfroc_S_mean,
+                           sfroc_analysis_ms, sfroc_correction_ms, sfroc_encode_ms, sfroc_timing_method,
+                           sfroc_reliability, sfroc_O_learned_mean
   semantic_confidence.jsonl   component A only: per image, every upstream tag with its confidence, kept or not
   spatial_reliability.jsonl   SSR only: per image, mode, scalar (if any) and map statistics (mean, clipping, coverage)
   spatial_maps.npz            SSR only: the 12x12 reliability grid per image (after the shuffle control, if any)
+  observation_consistency.jsonl  V2 only: per pipeline call, SFR-OC settings, map statistics (O, S, W and every
+                              indicator mean), semantic and reference source, overhead and the per-step gamma/Delta log
+  observation_maps.npz        V2 only: W, O and the indicator maps per image (heuristic: five indicators at analysis
+                              resolution; learned: component_learned = the LORNet map at latent resolution)
+<results_root>/v2_screening/<dataset>/..., sfroc_screening.json, map_validity_<dataset>.json     V2 screening
+<lornet_output_dir>/cache/, checkpoints/{best,last}.pt, train_log.jsonl, train_summary.json, evaluation.json   LORNet
   sr/sample00/<stem>.png   upstream outputs
   sr/txt/<stem>.txt        prompts (save_prompts)
   eval/paired_per_image.csv   eval/paired_summary.json
@@ -394,6 +485,10 @@ deterministic mode. Expect small numeric differences between repeated runs and a
   measures, and no Gate 0 result exists yet. The SSR tile tracking is verified per call against the pipeline's
   pixels and tested on the tiny pipeline; the real tiled path (outputs > 768 px, e.g. some RealLR200 images) is
   first exercised on Colab.
+* V2 (SFR-OC) has only run on the tiny CPU pipeline: correctness of the maths, the exact no-op, absence of extra
+  UNet/ControlNet calls and the tiled path are tested; whether the reference latent and the maps behave sensibly on
+  real images, and whether SFR-OC helps, is unknown until the V2 ablation has run. The observation indicators are
+  uncalibrated heuristics.
 * Not yet run on a GPU. The tests cover config handling, the wrapper (with a stand-in for `test_seesr`), file
   matching, validation, aggregation and real pyiqa PSNR/SSIM on CPU. LPIPS, DISTS, MUSIQ and CLIPIQA weights could
   not be downloaded in the development sandbox, so those four metrics are first exercised on Colab.

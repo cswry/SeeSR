@@ -37,6 +37,11 @@ from experiments.common import (  # noqa: E402
 )
 
 SUPPORTED_SCHEDULER = "DDPMScheduler"
+# Alternative samplers for the separate efficiency experiment only (configs/efficiency_sweep.yaml), selected with
+# runtime.sampler_override (runtime.scheduler stays DDPMScheduler, as upstream). They replace the loaded
+# DDPMScheduler with Class.from_config(<the same scheduler config>). Compatibility with the upstream pipeline is
+# tested in tests/test_sfroc.py; their effect on quality is what that experiment measures.
+ALTERNATIVE_SCHEDULERS = ("DDIMScheduler", "DPMSolverMultistepScheduler")
 CONNECTED_START_STEPS = 999  # test_seesr.main() never forwards --start_steps; the pipeline default is 999.
 
 
@@ -63,7 +68,11 @@ def build_upstream_args(cfg, output_dir):
         )
     scheduler = cfg.get("runtime", {}).get("scheduler", SUPPORTED_SCHEDULER)
     if scheduler != SUPPORTED_SCHEDULER:
-        raise ConfigError(f"runtime.scheduler={scheduler!r}: only {SUPPORTED_SCHEDULER} (upstream) is supported.")
+        raise ConfigError(f"runtime.scheduler={scheduler!r}: only {SUPPORTED_SCHEDULER} (upstream) is supported; "
+                          f"the efficiency experiment uses runtime.sampler_override instead.")
+    override = cfg.get("runtime", {}).get("sampler_override")
+    if override is not None and override not in ALTERNATIVE_SCHEDULERS:
+        raise ConfigError(f"runtime.sampler_override={override!r}: must be null or one of {ALTERNATIVE_SCHEDULERS}")
     if cfg.get("runtime", {}).get("reseed_per_image") and inference.get("seed", defaults["seed"]) is None:
         raise ConfigError("runtime.reseed_per_image requires inference.seed to be set")
     if int(inference.get("num_inference_steps", defaults["num_inference_steps"])) < 1:
@@ -83,12 +92,32 @@ def build_upstream_args(cfg, output_dir):
     return Namespace(**args)
 
 
+def effective_sampler(cfg):
+    rt = cfg.get("runtime", {})
+    return rt.get("sampler_override") or rt.get("scheduler", SUPPORTED_SCHEDULER)
+
+
 def method_config(cfg):
     from cfa_seesr import MethodConfig
     try:
-        return MethodConfig.from_dict(cfg.get("method"))
+        method = MethodConfig.from_dict(cfg.get("method"))
     except (TypeError, ValueError) as e:
         raise ConfigError(f"invalid method section: {e}") from e
+    if method.sfroc_active:
+        from cfa_seesr.observation_consistency import SUPPORTED_SCHEDULERS
+        sched = effective_sampler(cfg)
+        if sched not in SUPPORTED_SCHEDULERS:
+            raise ConfigError(f"method.sfr_oc does not support the sampler {sched!r} "
+                              f"(supported: {SUPPORTED_SCHEDULERS})")
+        if method.sfr_oc.uses_learned:                  # validate the LORNet checkpoint before any model loads
+            from cfa_seesr.lornet import LORNetCheckpointError, load_lornet
+            try:
+                load_lornet(method.sfr_oc.learned.checkpoint, "cpu")
+            except LORNetCheckpointError as e:
+                raise ConfigError(f"method.sfr_oc.reliability={method.sfr_oc.reliability!r}: {e}. Train LORNet "
+                                  "(experiments/training/train_lornet.py) and set method.sfr_oc.learned.checkpoint"
+                                  ) from e
+    return method
 
 
 def preflight(cfg, args):
@@ -156,6 +185,9 @@ class Recorder:
         self.spatial_records = []       # per-image SSR statistics, written as JSONL
         self.spatial_grids = {}         # image stem -> SSR grid (numpy), written as spatial_maps.npz
         self.tile_overlap = 4           # latent_tiled_overlap of the run (SSR tile tracking)
+        self.scheduler_name = SUPPORTED_SCHEDULER
+        self.sfroc_records = []         # per pipeline call SFR-OC summary + per-step log (V2), JSONL
+        self.sfroc_maps = {}            # image stem -> {"W": ..., "O": ...} at latent resolution (V2)
 
     def _sync(self):
         import torch
@@ -211,6 +243,22 @@ class TimedPipeline:
             row["lr_factor_first"], row["lr_factor_last"] = factors[0], factors[-1]
             row["lr_factor_mean"] = sum(factors) / len(factors)
             row["controlnet_calls"] = len(factors)
+        if rec.method.sfroc_active and rec.method_state.sfroc is not None:
+            ctrl = rec.method_state.sfroc
+            summ = ctrl.summary()
+            row.update(sfroc_reference=summ["reference_source"], sfroc_steps_corrected=summ["steps_corrected"],
+                       sfroc_gamma_mean=summ["gamma_mean"], sfroc_delta_abs_mean=summ["delta_abs_mean"],
+                       sfroc_W_mean=summ.get("W_mean"), sfroc_W_min=summ.get("W_min"), sfroc_W_max=summ.get("W_max"),
+                       sfroc_O_mean=summ.get("O_mean"), sfroc_S_mean=summ.get("S_mean"),
+                       sfroc_analysis_ms=summ["analysis_ms"], sfroc_correction_ms=summ["correction_ms"],
+                       sfroc_encode_ms=summ["encode_ms"], sfroc_timing_method=summ["timing_method"],
+                       sfroc_reliability=summ["reliability"], sfroc_O_learned_mean=summ.get("O_learned_mean"))
+            rec.sfroc_records.append({"image": row["image"], "sample": len(row["diffusion_s"]) - 1, **summ,
+                                      "steps": ctrl.step_records})
+            if ctrl.cfg.save_maps and row["image"] not in rec.sfroc_maps and ctrl.W is not None:
+                rec.sfroc_maps[row["image"]] = {
+                    "W": ctrl.W[0, 0].cpu().numpy(), "O": ctrl.O_latent.cpu().numpy(),
+                    **{f"component_{k}": v.cpu().numpy() for k, v in (ctrl.components or {}).items()}}
         if rec.method.spatial_active:
             log = rec.method_state.tile_log
             row["ssr_tiled"] = any(region is not None for _, region in log)
@@ -244,6 +292,9 @@ def install_hooks(test_seesr, recorder, timings):
         pipe = original_load(*a, **k)
         timings["pipeline_load_s"] = time.perf_counter() - t0
         recorder.pipeline = pipe
+        if recorder.scheduler_name != SUPPORTED_SCHEDULER:   # efficiency experiment only
+            import diffusers
+            pipe.scheduler = getattr(diffusers, recorder.scheduler_name).from_config(pipe.scheduler.config)
         original_step = pipe.scheduler.step
 
         # functools.wraps keeps the signature visible to inspect.signature(); the upstream
@@ -268,6 +319,10 @@ def install_hooks(test_seesr, recorder, timings):
         recorder._sync()
         t0 = time.perf_counter()
         spatial = None
+        recorder.method_state.image_key = recorder.names[len(recorder.rows) - 1]
+        recorder.method_state.semantic_reliability = None
+        # original LR image (before the upstream resizes): SFR-OC estimates the observation noise on it
+        recorder.method_state.lr_image = a[1] if len(a) > 1 else k.get("image")
         if recorder.method.spatial_active:
             import cfa_seesr
             from cfa_seesr.spatial_reliability import SpatialMap
@@ -303,6 +358,7 @@ def install_hooks(test_seesr, recorder, timings):
         row["prompt_s"] = time.perf_counter() - t0
         row["hard_prompt"] = prompt
         if result is not None:
+            recorder.method_state.semantic_reliability = result.reliability   # used by SFR-OC fusion (V2)
             row.update(n_tags_upstream=result.n_upstream, n_tags_selected=result.n_selected,
                        semantic_reliability=result.reliability, soft_scale=result.soft_scale)
             recorder.semantic_records.append({"image": row["image"], **result.summary(),
@@ -340,6 +396,10 @@ def install_method(pipe, recorder):
     if method.spatial_active and not soft_range_is_identity:
         # installed after the LR wrapper, so it wraps it: the tile is identified before B rescales
         hooks.install_spatial_tracking(pipe, recorder.method_state, recorder.tile_overlap)
+    if method.sfroc_active:
+        # installed last: its prepare_image wrapper runs after SSR's (which sets the SSR latent map), and its
+        # scheduler.step wrapper sits outside the step counter
+        hooks.install_observation_consistency(pipe, method.sfr_oc, recorder.method_state)
     recorder.method_hooks = hooks
 
 
@@ -405,6 +465,7 @@ def run_one(cfg, results_root, overwrite=False, dry_run=False):
     method = method_config(cfg)
     recorder = Recorder(order, reseed_base=args.seed if reseed else None, method=method)
     recorder.tile_overlap = int(args.latent_tiled_overlap)
+    recorder.scheduler_name = effective_sampler(cfg)
     timings = {}
     install_hooks(test_seesr, recorder, timings)
 
@@ -415,9 +476,10 @@ def run_one(cfg, results_root, overwrite=False, dry_run=False):
         "git": git_info(),
         "environment": environment_info(),
         "attention_backend": backend,
-        "method": {**method.to_dict(), "is_baseline": method.is_baseline,
+        "method": {**method.to_dict(), "version": _method_version(), "signature": _method_signature(method),
+                   "is_baseline": method.is_baseline,
                    "semantic_active": method.semantic_active, "lr_active": method.lr_active,
-                   "spatial_active": method.spatial_active},
+                   "spatial_active": method.spatial_active, "sfroc_active": method.sfroc_active},
         "seeding": (
             f"reseed_per_image: before each pipeline call the generator and the global RNG are set to "
             f"image_seed(seed={args.seed}, image stem, sample index) (sha256-derived; see per_image.csv)" if reseed else
@@ -478,6 +540,13 @@ def run_one(cfg, results_root, overwrite=False, dry_run=False):
         if recorder.spatial_grids:
             import numpy as np
             np.savez_compressed(out_dir / "spatial_maps.npz", **recorder.spatial_grids)
+        if recorder.sfroc_records:
+            write_jsonl(out_dir / "observation_consistency.jsonl", recorder.sfroc_records)
+            meta["method"]["sfroc_summary"] = sfroc_summary(recorder.sfroc_records)
+        if recorder.sfroc_maps:
+            import numpy as np
+            np.savez_compressed(out_dir / "observation_maps.npz",
+                                **{f"{img}__{k}": v for img, maps in recorder.sfroc_maps.items() for k, v in maps.items()})
         meta["outputs"] = {"sr_dir": str(out_dir / "sr" / "sample00"), "per_image_csv": str(out_dir / "per_image.csv")}
         write_csv(out_dir / "per_image.csv", rows)
         write_json(out_dir / "run_metadata.json", meta)  # written last; status is only final here
@@ -523,10 +592,51 @@ def runtime_snapshot(pipe):
     return snap
 
 
+def _method_version():
+    import cfa_seesr
+    return cfa_seesr.METHOD_VERSION
+
+
+def _method_signature(method):
+    import cfa_seesr
+    return cfa_seesr.method_signature(method)
+
+
 METHOD_ROW_FIELDS = ("n_tags_upstream", "n_tags_selected", "semantic_reliability", "soft_scale",
                      "lr_factor_first", "lr_factor_last", "lr_factor_mean", "controlnet_calls",
                      "ssr_mode", "ssr_n_tags", "ssr_mean", "ssr_min", "ssr_max", "ssr_clip_low", "ssr_clip_high",
-                     "ssr_coverage", "ssr_tiled", "ssr_controlnet_calls")
+                     "ssr_coverage", "ssr_tiled", "ssr_controlnet_calls",
+                     "sfroc_reference", "sfroc_steps_corrected", "sfroc_gamma_mean", "sfroc_delta_abs_mean",
+                     "sfroc_W_mean", "sfroc_W_min", "sfroc_W_max", "sfroc_O_mean", "sfroc_S_mean",
+                     "sfroc_analysis_ms", "sfroc_correction_ms", "sfroc_encode_ms", "sfroc_timing_method", "sfroc_reliability",
+                     "sfroc_O_learned_mean")
+
+
+def sfroc_summary(records):
+    """Run-level SFR-OC statistics (V2): settings, map statistics and module overhead per pipeline call."""
+    n = len(records)
+
+    def mean(key):
+        vals = [r[key] for r in records if isinstance(r.get(key), (int, float))]
+        return sum(vals) / len(vals) if vals else None
+
+    first = records[0]
+    return {"n_calls": n,
+            "settings": {k: first.get(k) for k in ("strength", "band", "lowpass", "sigma", "cutoff", "schedule",
+                                                   "power", "t_min", "t_max", "precision", "formulation",
+                                                   "prediction_type", "map_mode", "control", "reliability",
+                                                   "lornet_checkpoint", "lornet_sha256", "lornet_tau")},
+            "reference_sources": sorted({str(r.get("reference_source")) for r in records}),
+            "semantic_sources": sorted({str(r.get("semantic_source")) for r in records}),
+            "mean_steps_corrected": mean("steps_corrected"), "mean_gamma": mean("gamma_mean"),
+            "mean_W": mean("W_mean"), "mean_O": mean("O_mean"), "mean_S": mean("S_mean"),
+            "mean_analysis_ms": mean("analysis_ms"), "mean_correction_ms": mean("correction_ms"),
+            "mean_encode_ms": mean("encode_ms"),
+            "timing_methods": sorted({str(r.get("timing_method")) for r in records}),
+            "timing_note": ("SFR-OC sections only (map analysis, reference encode, correction kernels). On CUDA: "
+                            "CUDA events, GPU time from the first to the last kernel of each section, excluding "
+                            "UNet/ControlNet work queued before it; read once after the pipeline call. On CPU: "
+                            "perf_counter. sfr_oc.profile=true adds explicit synchronisation.")}
 
 
 def spatial_summary(records):

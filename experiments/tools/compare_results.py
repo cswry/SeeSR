@@ -115,8 +115,19 @@ def per_image_values(exp, metric):
 # --------------------------------------------------------------------------- #
 # Compatibility (track B)
 # --------------------------------------------------------------------------- #
-def signature(exp):
-    """Every setting that must be identical across track-B runs, flattened to {field: value}."""
+SAMPLER_FIELDS = ("runtime.sampler_override", "scheduler.class", "scheduler.config")
+
+
+def sampler_of(exp):
+    return (exp["meta"].get("scheduler") or {}).get("class") or exp["meta"]["config"].get("runtime", {}).get("scheduler")
+
+
+def signature(exp, allow_sampler=False):
+    """Every setting that must be identical across track-B runs, flattened to {field: value}.
+
+    allow_sampler (efficiency experiment only): the scheduler class/config may differ; each variant must then
+    use a single sampler (checked in compatibility()).
+    """
     m = exp["meta"]
     sig = {
         "status": m.get("status"),
@@ -151,10 +162,13 @@ def signature(exp):
             sig["eval.lrc.lr_dir"] = s.get("lr_dir")
             sig["eval.lrc.scale"] = s.get("scale")
     sig["eval.kinds"] = tuple(sorted(exp["summaries"]))
+    if allow_sampler:
+        for f in SAMPLER_FIELDS:
+            sig.pop(f, None)
     return sig
 
 
-def compatibility(exps):
+def compatibility(exps, allow_sampler=False):
     """Return every difference that makes the runs incomparable (empty = compatible)."""
     problems = []
     for e in exps:
@@ -164,7 +178,7 @@ def compatibility(exps):
             problems.append(f"{e['name']}: reseed_per_image is not true (track-A runs cannot be paired)")
         if not e["summaries"]:
             problems.append(f"{e['name']}: not evaluated")
-    sigs = {e["name"]: signature(e) for e in exps}
+    sigs = {e["name"]: signature(e, allow_sampler) for e in exps}
     for field in sorted(set().union(*sigs.values())):
         values = {n: s.get(field) for n, s in sigs.items()}
         if len({json.dumps(v, sort_keys=True, default=str) for v in values.values()}) > 1:
@@ -178,6 +192,14 @@ def compatibility(exps):
     for variant, ms in methods.items():
         if len(ms) > 1:
             problems.append(f"variant {variant!r} has {len(ms)} different method configurations")
+    if allow_sampler:
+        samplers = defaultdict(set)
+        for e in exps:
+            samplers[variant_of(e)].add(sampler_of(e))
+        for variant, ss in samplers.items():
+            if len(ss) > 1:
+                problems.append(f"variant {variant!r} mixes samplers {sorted(map(str, ss))}: give each sampler "
+                                "its own variant name")
     seen = defaultdict(list)
     for e in exps:
         seen[(variant_of(e), steps_of(e), seed_of(e))].append(e["name"])
@@ -404,6 +426,8 @@ def main(argv=None):
     s.add_argument("--experiments", nargs="*", help="default: every run folder with per-image seeding")
     s.add_argument("--reference_steps", type=int, default=50)
     s.add_argument("--output_dir")
+    s.add_argument("--allow_sampler_differences", action="store_true",
+                   help="efficiency experiment only: runs may use different schedulers (one per variant)")
     r = sub.add_parser("reproduction", help="track A: upstream run vs published numbers")
     r.add_argument("--results_root", required=True)
     r.add_argument("--dataset", required=True)
@@ -436,7 +460,7 @@ def main(argv=None):
         print(f"ERROR: no track-B runs under {root}", file=sys.stderr)
         return 2
     exps = [load_experiment(root / n) for n in names]
-    problems = compatibility(exps)
+    problems = compatibility(exps, allow_sampler=getattr(a, "allow_sampler_differences", False))
     report = {"created_at": now_iso(), "dataset": a.dataset, "experiments": names, "excluded": excluded,
               "compatible": not problems, "differences": problems}
     if problems:
@@ -449,6 +473,7 @@ def main(argv=None):
     write_json(out / "sampling_comparison.json", {
         **report, "reference": {"variant": ref_variant, "steps": a.reference_steps},
         "methods": {variant_of(e): json.loads(method_of(e)) for e in exps},
+        "samplers": {variant_of(e): sampler_of(e) for e in exps},
         "summary": summary, "paired_differences": diffs})
     md = sampling_markdown(a.dataset, summary, diffs, metrics, a.reference_steps, ref_variant)
     (out / "sampling_comparison.md").write_text(md, encoding="utf-8")

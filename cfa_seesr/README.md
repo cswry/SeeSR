@@ -8,6 +8,8 @@ one optional extension:
 * **B, LR-fidelity-aware guidance**: a timestep-dependent strength for the ControlNet (LR) residuals;
 * **SSR, spatial semantic reliability** (§11): A's soft-prompt strength distributed over the image using
   DAPE's tagging-head attention. Used only if an attention-localisation check (Gate 0) passes.
+* **V2, SFR-OC** (§12): frequency-selective observation consistency inside the scheduler step, weighted by a
+  fusion of LR-observation reliability and semantic reliability. Architecture diagrams: `docs/ARCHITECTURE.md`.
 
 All of them use the released weights unchanged; none adds a model, a trainable parameter or a network
 pass. Upstream SeeSR files are not modified. With every component disabled no hook is installed, and
@@ -202,13 +204,20 @@ cfa_seesr/
   semantic_confidence.py   Component A: confidence, selection, reliability, soft-prompt scale
   lr_guidance.py           Component B: schedule f(t)
   spatial_reliability.py   SSR: attention capture, reliability grid, feature-resolution maps, tile regions
+  observation_reliability.py  V2 part A: heuristic, noise-compensated observation-reliability indicators and map O
+  frequency.py             V2: Gaussian / padded-FFT low-pass, two-pass split, decomposition, leakage diagnostic
+  observation_consistency.py  V2 parts B and C: config, gamma(t), fusion W (+ controls), two-pass Delta,
+                           output-space coefficient c0(t), deferred checks, CUDA-event timer, per-call controller
+  lornet.py                V2: LORNet model, features, checkpoint format and validated loading
+  latent_targets.py        V2: upstream-identical LR resizing, VAE encoding, teacher target, counterfactual benefit
   hooks.py                 forward hooks on image_attentions (scalar or spatial); ControlNet / prepare_image
                            wrappers (LR schedule, SSR tile tracking); clean removal in reverse order
 ```
 
 Configuration: the `method` section of `experiments/configs/baseline.yaml` (disabled) and the `variants`
-in `experiments/configs/sampling_sweep.yaml`. Tests: `experiments/tests/test_method.py`,
-`experiments/tests/test_spatial.py`.
+in `experiments/configs/sampling_sweep.yaml` (V1) and `v2_ablation.yaml` (V2). Tests: `experiments/tests/test_method.py`,
+`test_spatial.py` (V1), `test_sfroc.py`, `test_sfroc_remediation.py`, `test_lornet.py` (V2). LORNet training:
+`experiments/training/`.
 
 ## 11. Spatial semantic reliability (SSR)
 
@@ -303,3 +312,176 @@ not modify). SAM-DiffSR (Wang et al., arXiv:2402.17133) uses segmentation masks 
 during training; UPSR (Zhang et al., CVPR 2025) controls noise per region from an uncertainty estimate, with a
 trained model. SSR is an incremental, training-free variant; its value is an empirical question that Gate 0 and the
 screening decide.
+
+
+## 12. V2: SFR-OC (frequency-selective observation consistency)
+
+**Purpose.** Keep trustworthy *low-frequency* structure of the LR observation during denoising, where it is
+trustworthy, while leaving high-frequency detail to the generative prior. No UNet/ControlNet pass is added; off by
+default (`method.sfr_oc.enabled: false`, `strength: 0`). Related work and the precise hypothesis:
+`docs/related_work_v2.md` (closest prior idea: ILVR's low-frequency consistency; SFR-OC is not claimed novel on its
+own). Formulation version: `cfa_seesr.METHOD_VERSION` (2.1.0), recorded with `signature: cfa-seesr-v2` in every
+`run_metadata.json`.
+
+### Part A: observation reliability O (`observation_reliability.py`, heuristic; or LORNet, §13)
+
+The runner passes the **original LR image** (before upstream resizing); the analysis runs on it, so the noise
+estimate and every statistic refer to the same pixels. Without it (direct pipeline use) the conditioning image is
+area-downsampled by `analysis_scale`. Y = BT.601 luminance; Gaussian windows σ_w = `window`/4.
+
+*Noise.* With the LR (white model): σ_n = 1.4826·median|L|/6 over low-gradient pixels (Immerkær operator L; the mask
+is the gradient of G₂∗Y at or below its median, so it follows structure rather than the noise). Each statistic's
+noise contribution f_k follows from σ_n² and its filter. Without the LR the resampling makes the noise correlated:
+each f_k is measured directly as the median of statistic k over the low-gradient pixels (limitation: an image with no
+flat region gets floors that contain signal and is suppressed toward 0).
+
+*Indicators* from compensated statistics x_s = max(x − κ_k f_k, 0), κ_k = 1 + z·(relative std of statistic k under
+the noise model; z = `significance` = 2), normalised by an absolute significance ratio
+SNR(x_s) = x_s / (x_s + κ_k f_k + a_k) (a_k: fixed reference energy from `reference_level`; no per-image rescaling):
+
+| Indicator | Definition | Meaning |
+|---|---|---|
+| edge_coherence | SNR(λ₁′)·((λ₁′ − λ₂′)/(λ₁′ + λ₂′ + f + floor))², λ′: compensated structure-tensor eigenvalues | clean oriented edges |
+| frequency_energy | SNR of the window energy of G₁∗Y − G₂∗Y | LR still carries band-pass content |
+| contrast | SNR of the local variance | local signal contrast |
+| noise | (var_s + floor²)/(var_s + σ_n² + floor²), floor = one 8-bit level | share of local variance that is signal |
+| sharpness | (√G − √G_b)/(√G + √(κf_G) + floor) from compensated gradient energies of Y_s = G_pre∗Y before/after a σ 1.5 re-blur | low where the LR is already blurred, and for noise |
+
+O = Σ w_k I_k / Σ w_k, Gaussian-smoothed (σ 1 px), resized to latent resolution. Tested property: the mean of O does
+not increase with added white noise (averaged over noise draws; flat, textured, edge and mixed scenes), without any
+clipping to a reference. O is a heuristic score, **not a probability**. Limitations: the indicators are correlated;
+compensation assumes the noise model; JPEG blocks still look like structure.
+
+### Part C: reliability fusion (`observation_consistency.fuse`)
+
+At latent resolution (h, w) = (H/8, W/8); S = SSR map M (if SSR is active), else component A's C, else
+`semantic_default` (logged as `semantic_source`):
+
+```
+W = clip(w_obs · O + w_sem · (1 − S) + bias, w_min, w_max)      map = fused (default w_obs = w_sem = 0.5)
+W = mean(W_fused) everywhere                                    map = mean_matched  (control: same mean, no spatial variation)
+W = 1;   W = O;   W = 1 − S                                      map = uniform / observation / semantic
+control = shuffled: W permuted in bands (rows, then columns; any size; never the identity; same values and mean)
+```
+
+### Part B: correction in the scheduler step (`observation_consistency`, `hooks.install_observation_consistency`)
+
+For `scheduler.step(model_output, t, x_t, ...)`, ᾱ = `alphas_cumprod[t]`, T = num_train_timesteps − 1:
+
+```
+γ(t)  = strength · f(t/T)                          f: constant | (t/T)^power | window; 0 outside [t_min, t_max]
+x̂₀    = (x_t − √(1−ᾱ) ε̂)/√ᾱ  |  √ᾱ x_t − √(1−ᾱ) v̂  |  model_output        (epsilon | v_prediction | sample)
+r     = z_lr − x̂₀                                   z_lr = posterior mean of VAE(2I − 1) · scaling_factor
+Δ     = γ(t) · LPF_h(W ⊙ LPF_h(r))                  band low (default);   Δ = γ(t) · W ⊙ r   band full
+x_{t−1}' = step(model_output, t, x_t) + c₀(t) · Δ  (= the step with x̂₀ + Δ; precision 'output', default)
+   DDPM: c₀ = √ᾱ_prev · β_t / (1 − ᾱ),  β_t = 1 − ᾱ/ᾱ_prev
+   DDIM: c₀ = √ᾱ_prev − √(1 − ᾱ_prev − s²) · √ᾱ/√(1 − ᾱ),  s = η·√variance(t, prev)
+```
+
+*Two-pass low-pass.* LPF_h is one pass of the documented filter applied twice: Gaussian with σ/√2 per pass
+(variances add, so the composite is the documented σ), or the ideal FFT mask with the same cutoff (idempotent). For
+uniform W this equals γ·W·LPF(r) (tested); for a spatially varying W, multiplying by W creates high frequencies that
+the outer pass removes (tested with the Fourier energy above a threshold, odd and even sizes). The Gaussian is not
+band-limited: its amplitude response exp(−2π²σ²f²) halves at a period of ≈ 5.3σ, i.e. **≈ 16 latent px ≈ 128 output
+px** for σ = 3 (×8 VAE). The FFT path reflect-pads by half the size before filtering (no wrap-around between borders).
+
+*Output-space application.* DDPM and DDIM are linear in x̂₀ for fixed x_t and noise when clipping and thresholding are
+off (enforced), so the unchanged step runs on the **unchanged model output** (same dtype, same RNG draw as V1) and
+c₀Δ is added to its result in float32, then cast to the output dtype; `pred_original_sample` becomes x̂₀ + Δ. Tested
+equal (float64, fixed generator) to stepping with x̂₀ + Δ for DDPM (all prediction types, including the last step) and
+DDIM (η = 0, 0.5, 1). The earlier formulation (rewrite ε̂ so the scheduler re-derives x̂₀ + Δ) is kept as
+`precision: model_output`; with fp16 model outputs it amplifies the rounding of ε̂′ by √(1−ᾱ)/√ᾱ (≈ 13× at t = 981).
+Measured on random fp16 inputs (`test_sfroc_remediation.py`, |Δ| = 0.03): relative error of the realised displacement
+0.18 (output) vs 0.38 (model_output) at t = 951, 0.04 vs 0.09 at t = 501. The remaining error is the final fp16
+rounding of x_{t−1}, the same floor V1's own update has; `precision: output_carry` keeps that remainder in float32
+and adds it at the next corrected step (error feedback; preserves the accumulated displacement to one rounding;
+an option, not the default, because the remainder is added after, not before, the next model evaluation).
+
+*Exact no-op.* Where γ(t) = 0 the original step is called with the original arguments (tested bit-for-bit through
+the runner: `v2_zero` / `v2_heur_sem_zero` == `combined_spatial`).
+
+*Safeguards.* Supported: `DDPMScheduler`, `DDIMScheduler`; prediction types epsilon / v_prediction / sample. Rejected
+at installation and at configuration time: other schedulers, learned variance (`variance_type: learned*`),
+`thresholding: true`, `clip_sample: true`. The reference latent takes the posterior of the pipeline's own LR encode
+(no extra VAE pass); the CFG copies of the conditioning image and of that posterior are checked to be identical
+before batch item 0 is used. Tiled sampling: the step sees the blended full latent (tested).
+
+*Synchronisation and timing.* During denoising nothing is converted to a Python value: the timestep is read from a
+host copy of `scheduler.timesteps` (taken once per call; agreement with the passed tensor is a deferred device check),
+diagnostics stay on the device, and all checks (finite maps, identical CFG copies, timestep agreement) are evaluated
+once in `summary()` after the call, which raises if one failed. Module time: CUDA events on CUDA (GPU time from the
+first to the last SFR-OC kernel; UNet/ControlNet work queued earlier is excluded; read once after the call),
+`perf_counter` on CPU; `profile: true` adds explicit synchronisation (benchmarks only). The CUDA path is not
+exercised on this development machine (no GPU); the CPU path and the absence of host conversions are tested.
+
+| Parameter | Default (`baseline.yaml`) | V2 ablation | Role |
+|---|---|---|---|
+| `strength` | 0.0 | screened (0.25 / 0.5 / 1.0), placeholder 0.5 | γ_max |
+| `band` | low | low (full in optional variants) | frequency selectivity |
+| `lowpass`, `sigma`, `cutoff` | gaussian, 3 latent px (half amplitude at ≈ 128 output px), 0.25 | same | bandwidth |
+| `schedule`, `power`, `t_min`, `t_max` | power, 1, 0, 1000 | same | γ(t) = strength·t/T |
+| `precision` | output | output | how Δ reaches the step |
+| `reliability` | heuristic | heuristic / learned / blend | source of O (§13) |
+| `fusion.*` | fused, 0.5 / 0.5, bias 0 | fused / observation / uniform / mean_matched / shuffled | map |
+| `observation.*` | window 7, equal weights, z = 2, reference 0.02 | same | part A |
+
+All values are initial and untuned except the strength, which is selected on held-out validation images by the
+pre-registered rule of `experiments/tools/sfroc_screening.py`.
+
+**Overhead.** No UNet/ControlNet pass (asserted in tests). Per image: one map analysis (or one LORNet pass) plus,
+per corrected step, two low-passes of a `[1,4,h,w]` latent and element-wise operations. CPU reference on this
+development machine (not a GPU claim): 512² image, latent 64²: heuristic analysis ≈ 16 ms, LORNet ≈ 37 ms,
+correction ≈ 0.8 ms per step. GPU numbers: `experiments/tools/benchmark_sfroc.py` and `sfroc_*_ms` in `per_image.csv`.
+
+**Expected failure cases.** Pulling toward a degraded LR latent can re-introduce blur, colour casts or JPEG structure
+in the low band; the LR latent of a ×4 bicubic upscale is itself smooth, so a full-band correction (v2_global) is
+expected to blur; the map may be high exactly where detail should be generated; overlap with the upstream AdaIN colour
+fix may make part of the effect redundant. Measure, do not assume.
+
+## 13. V2: LORNet (learned observation reliability)
+
+**Why.** The heuristic indicators measure local signal activity; they cannot tell an LR edge that agrees with the HR
+image from one that does not (ringing, JPEG blocks, misregistration and blur all produce "structure"). Whether the LR
+observation is *faithful* at a location is a property of the LR–HR pair, so it can be learned from paired data — in
+the same latent space in which SFR-OC corrects.
+
+**Supervision** (`latent_targets.py`, `experiments/training/`). On aligned training pairs (RealSR V3 and DRealSR
+*training* splits; validation split held out by image; test folders refused; any stem shared with the evaluation
+folders is an error): the LR crop is resized exactly as `test_seesr.py` does, both images are encoded by the frozen
+SeeSR VAE (posterior mean × scaling factor of 2I − 1), and
+
+```
+E = LocalAverage_3( mean_c |LPF(z_lr − z_hr)| )          LPF = the SFR-OC Gaussian (σ = 3 latent px)
+R_teacher = exp(−E / τ),   τ = median(E over training crops) / ln 2   (median pixel → 0.5; saved with the model)
+L = Charbonnier(σ(logit), R_teacher) + λ_TV · TV(σ(logit))           (λ_TV = 0.05)
+```
+
+Charbonnier (robust regression) is the default: the target is a deterministic soft score, not a label, and
+large discrepancies come from misregistration as much as from degradation. Implemented alternatives: soft-label BCE
+(calibrated-probability view) and a Gaussian NLL with an uncertainty head (heteroscedastic); use them only as
+ablations. **The target is a proxy**: agreement of LR and HR latents does not prove that pulling the diffusion state
+toward z_lr helps; `experiments/tools/sfroc_map_validity.py` tests that separately (counterfactual latent benefit on
+V1 outputs) and the ablation measures it.
+
+**Network** (`lornet.py`): input features y (luminance), gradient magnitude, local contrast, high-frequency energy
+(4 channels; `rgb` optional; compact by design — each is one of the heuristic's measurements, so the learned model is
+compared to the heuristic on equal information); conv 3×3/2 stem (16) → depthwise-separable stages /4 (24), /8 (32),
+/16 (48) with residual DS blocks → multi-dilation context (d = 1, 2, 4) → bilinear ×2, skip from /8, 1×1 fuse,
+residual block → 3×3 head → sigmoid at /8 = latent resolution. Any H, W multiple of 8 (internally padded to 16);
+GroupNorm, so batch-size independent. **33 049 parameters, 143 M multiply-accumulates at 512²** (counted), ≈ 37 ms
+on this CPU at 512² (GPU time: `train_lornet.py evaluate`, `benchmark_sfroc.py`).
+
+**Use in SFR-OC.** `sfr_oc.reliability: learned` (O = LORNet), `blend` (O = b·O_LORNet + (1 − b)·O_heuristic) or
+`heuristic`. The checkpoint (`sfr_oc.learned.checkpoint`) is validated before any model is loaded (format, version,
+configuration, τ, finite weights, strict state-dict match); without a valid one the run does not start — a map is
+never produced by random weights. Its path, SHA-256 and τ are recorded per run. The frozen backbone is unchanged;
+nothing is back-propagated through SeeSR (training uses cached latents only).
+
+**Why the backbone stays frozen.** The research question is whether observation reliability can steer an existing
+restoration prior; retraining UNet/ControlNet would confound it and is not feasible on a T4. LORNet trains in minutes
+to hours on cached latents (estimate; measure with `train_lornet.py`).
+
+**Limitations and distribution shift.** Trained on RealSR/DRealSR camera degradations (Canon/Nikon/DRealSR sensors);
+other degradations (RealLR200, JPEG-heavy web images) are out of distribution. RealSR LR images registered at HR size
+are downscaled ×4 to produce the network input (as the RealSR test crops are); misregistration in the pairs enters the
+target. The teacher is defined with the posterior mean; the pipeline's LR start samples the posterior.

@@ -10,6 +10,10 @@
   conditioning_scale * f(t), reading the actual timestep argument. Nothing else in the call changes.
 * SSR tile tracking: wraps `pipe.prepare_image` (records the full conditioning image and the latent size)
   and `controlnet.forward` (identifies the tile of each call, see install_spatial_tracking).
+* SFR-OC (V2, observation_consistency.py): wraps `pipe.prepare_image` (builds the reliability maps at
+  latent resolution; heuristic and/or LORNet, loaded from a validated checkpoint at installation), `pipe.vae.encode` (captures the pipeline's own LR posterior: no extra VAE pass) and
+  `pipe.scheduler.step` (runs the unchanged step on the unchanged model output and adds c0(t) * Delta to its
+  result; see observation_consistency.py). No UNet or ControlNet call is added.
 
 Everything is installed only for an enabled, non-identity component and removed with `MethodHooks.remove()`
 (wrappers are unwound in reverse order, so they compose).
@@ -26,6 +30,10 @@ class MethodState:
         self.soft_scale = 1.0
         self.spatial = None       # SpatialMap or None (scalar path)
         self.spatial_result = None
+        self.semantic_reliability = None   # component A's image-level C for the current image (or None)
+        self.sfroc = None         # SFROCController (V2) or None
+        self.image_key = ""
+        self.lr_image = None      # original LR image of the current image (SFR-OC noise estimate) or None
         self.lr_log = []          # [(timestep, factor)] for the current pipeline call
         self.reset_call()
 
@@ -159,6 +167,138 @@ class MethodHooks:
             return original_forward(sample, timestep, *args, **kwargs)
 
         self._patch(controlnet, "forward", forward)
+
+    def install_observation_consistency(self, pipe, cfg, state):
+        """SFR-OC (V2). Raises ValueError for an unsupported scheduler configuration (before any run).
+
+        Per denoising step no tensor is converted to a Python value (see observation_consistency.py,
+        "Synchronisation"); checks are deferred to SFROCController.summary().
+        """
+        import torch
+
+        from .observation_consistency import (SFROCController, apply_to_step_output, apply_x0_delta,
+                                              check_scheduler, correction_delta, gamma_at, step_diagnostics,
+                                              x0_coefficient)
+
+        prediction_type = check_scheduler(pipe.scheduler)
+        max_t = pipe.scheduler.config.num_train_timesteps - 1
+        lornet, lornet_meta = None, None
+        if cfg.uses_learned:                               # validated checkpoint or an exception: never random
+            from .lornet import checkpoint_sha256, load_lornet
+            device = next(pipe.unet.parameters()).device
+            lornet, lornet_meta = load_lornet(cfg.learned.checkpoint, device)
+            lornet_meta = {**lornet_meta, "path": str(cfg.learned.checkpoint),
+                           "sha256": checkpoint_sha256(cfg.learned.checkpoint)}
+        ctrl = SFROCController(cfg, max_t, prediction_type, lornet, lornet_meta)
+        state.sfroc = ctrl
+        scheduler_name = type(pipe.scheduler).__name__
+
+        original_encode = pipe.vae.encode
+
+        @functools.wraps(original_encode)
+        def encode(*a, **k):
+            out = original_encode(*a, **k)
+            if ctrl.encode_dist is None:
+                ctrl.encode_dist = out.latent_dist if hasattr(out, "latent_dist") else out[0]
+            return out
+
+        self._patch(pipe.vae, "encode", encode)
+
+        original_prepare = pipe.prepare_image
+
+        @functools.wraps(original_prepare)
+        def prepare_image(*a, **k):
+            image = original_prepare(*a, **k)
+            ctrl.reset()
+            ctrl.image = image
+            ctrl.lr_image = getattr(state, "lr_image", None)
+            h, w = image.shape[-2] // 8, image.shape[-1] // 8
+            ctrl.analysis_timer.start(image.device)
+            if state.spatial is not None:                      # SSR map at latent resolution
+                state.spatial.set_latent_size(h, w)
+                S = state.spatial.latent.float()
+                source = "ssr_map"
+            elif state.semantic_reliability is not None:       # component A's image-level reliability
+                S = torch.full((h, w), float(state.semantic_reliability), device=image.device)
+                source = "semantic_confidence"
+            else:
+                S = torch.full((h, w), cfg.fusion.semantic_default, device=image.device)
+                source = "default"
+            ctrl.build_maps(image, (h, w), S.to(image.device), key=state.image_key)
+            ctrl.analysis_timer.stop()
+            ctrl.map_info["semantic_source"] = source
+            return image
+
+        self._patch(pipe, "prepare_image", prepare_image)
+
+        scheduler = pipe.scheduler
+        original_step = scheduler.step
+
+        def reference_latent(sample):
+            if ctrl.z_ref is None:
+                vae = pipe.vae
+                dist = ctrl.encode_dist if cfg.reference == "auto" else None
+                if dist is not None:
+                    ctrl.reference_source = "pipeline_encode"
+                    mean = dist.mean
+                else:
+                    ctrl.encode_timer.start(sample.device)
+                    with torch.no_grad():
+                        x = (ctrl.image[0:1] * 2 - 1).to(device=vae.device, dtype=vae.dtype)
+                        mean = original_encode(x).latent_dist.mean
+                    ctrl.encode_timer.stop()
+                    ctrl.reference_source = "extra_encode"
+                if mean.shape[0] > 1:                          # CFG copies of the same image: deferred check
+                    ctrl.checks["reference_cfg_identical"] = (mean == mean[0:1]).all()
+                ctrl.z_ref = (mean[0:1].float() * vae.config.scaling_factor).detach()
+            if tuple(ctrl.z_ref.shape[-2:]) != tuple(sample.shape[-2:]):
+                raise RuntimeError(f"SFR-OC: reference latent {tuple(ctrl.z_ref.shape)} does not match the "
+                                   f"sample {tuple(sample.shape)}")
+            return ctrl.z_ref
+
+        def ddim_eta(a, k):
+            if scheduler_name != "DDIMScheduler":
+                return 0.0
+            if "eta" in k:
+                return float(k["eta"])
+            return float(a[0]) if a else 0.0
+
+        @functools.wraps(original_step)
+        def step(model_output, timestep, sample, *a, **k):
+            t = ctrl.next_timestep(scheduler, timestep)        # host value, no device sync
+            gamma = gamma_at(t, cfg, max_t)
+            if gamma == 0.0:                                   # exact no-op: original call, original arguments
+                ctrl.carry = None
+                ctrl.step_log.append({"t": t, "gamma": 0.0})
+                return original_step(model_output, timestep, sample, *a, **k)
+            if ctrl.W is None or tuple(ctrl.W.shape[-2:]) != tuple(sample.shape[-2:]):
+                raise RuntimeError("SFR-OC: reliability map missing or of the wrong size for this step")
+            a_t = float(scheduler.alphas_cumprod[t])           # host tensor on CPU in diffusers: no device sync
+            if not 0.0 < a_t < 1.0:
+                raise ValueError(f"SFR-OC: alphas_cumprod[{t}] = {a_t} is outside (0, 1)")
+            ctrl.correction_timer.start(sample.device)
+            z_ref = reference_latent(sample)
+            delta, x0, r = correction_delta(model_output, sample, a_t, z_ref, ctrl.W, gamma, cfg, prediction_type)
+            diag = step_diagnostics(t, gamma, r, delta)
+            if cfg.precision in ("output", "output_carry"):
+                c0 = x0_coefficient(scheduler, t, ddim_eta(a, k))
+                diag["c0"] = c0
+                ctrl.correction_timer.stop()
+                out = original_step(model_output, timestep, sample, *a, **k)
+                ctrl.correction_timer.start(sample.device)
+                carry = ctrl.carry if cfg.precision == "output_carry" else None
+                out, rem = apply_to_step_output(out, delta, c0, x0, carry=carry, return_carry=True)
+                ctrl.carry = rem if cfg.precision == "output_carry" else None
+                ctrl.correction_timer.stop()
+            else:
+                corrected = apply_x0_delta(model_output.float(), delta, a_t, prediction_type).to(model_output.dtype)
+                ctrl.correction_timer.stop()
+                out = original_step(corrected, timestep, sample, *a, **k)
+            ctrl.step_log.append(diag)
+            return out
+
+        self._patch(scheduler, "step", step)
+        return ctrl
 
     def remove(self):
         for h in self._handles:

@@ -1,0 +1,192 @@
+# CFA-SeeSR V2: hybrid ablation (frequency-selective observation consistency, heuristic and learned reliability).
+#   variants  x  DDPM steps {50, 30, 20}  x  seeds {42, 123, 2026}
+#
+# Same protocol as sampling_sweep.yaml (track B): per-image seeding, identical images, checkpoints, CFG,
+# precision, attention backend and post-processing; only the `method` section, the step count and the seed
+# differ. Run names {variant}_ddpm{steps}_s{seed} are disjoint from sampling_sweep.yaml's.
+# Every SFR-OC variant uses Delta = gamma * LPF_h(W * LPF_h(z_lr - x0)) (band low) unless stated otherwise.
+#
+#   1 original            SeeSR as released (no hook)                           - same run as sampling_sweep.yaml
+#   2 combined_spatial    CFA-SeeSR V1 = A + B + SSR                            - same run as sampling_sweep.yaml
+#   3 v2_heur             V1 + SFR-OC, W = O_heuristic                          (reliability heuristic, map observation)
+#   4 v2_learned          V1 + SFR-OC, W = O_LORNet                             (reliability learned,   map observation)
+#   5 v2_heur_sem         V1 + SFR-OC, W = fuse(O_heuristic, S)                 (heuristic, fused)  [training-free V2]
+#   6 v2_learned_sem      V1 + SFR-OC, W = fuse(O_LORNet, S)                    (learned, fused)    [primary hybrid]
+#   7 v2_uniform          V1 + SFR-OC, W = 1                                    (uniform map)
+#   8 v2_meanmatched      6 with W = per-image mean of W                        (same mean strength, no spatial variation)
+#   9 v2_shuffled         6 with W band-permuted                                (same values and mean, wrong places)
+#  10 v2_zero             6 with strength 0: hooks and LORNet installed, exact no-op (must equal 2 image for image)
+#
+# Variants 4, 6, 8, 9, 10 need a trained LORNet checkpoint (experiments/training/train_lornet.py); the SAME file
+# is used by all of them. Default path below = the training config's default output; otherwise
+#   --set method.sfr_oc.learned.checkpoint=<path to best.pt>
+# The runner validates the checkpoint before loading any model and refuses to run without a valid one.
+# Without LORNet, run the training-free subset:
+#   --variants original combined_spatial v2_heur v2_heur_sem v2_uniform v2_heur_sem_meanmatched v2_heur_sem_shuffled v2_heur_sem_zero
+#
+# Planned paired comparisons (per image, bootstrap CIs; tools/compare_results.py + paired analysis):
+#   v2_learned_sem vs v2_heur_sem      learned vs handcrafted reliability (same fusion, same strength)
+#   v2_learned_sem vs v2_meanmatched   spatial variation beyond the mean level
+#   v2_learned_sem vs v2_shuffled      placement of the map
+#   v2_uniform     vs v2_meanmatched   mean level of W
+#   v2_*           vs combined_spatial effect of SFR-OC over V1;  v2_zero == combined_spatial exactly
+# Spatial fusion counts as supported only if v2_learned_sem (or v2_heur_sem) beats BOTH controls; the map is
+# screened first against counterfactual latent benefit with tools/sfroc_map_validity.py (screening images only).
+#
+# Optional (not default): v2_global (band full, uniform), v2_spatial (band full, heuristic fused),
+#   v2_heur_sem_meanmatched / v2_heur_sem_shuffled / v2_heur_sem_zero (controls for the training-free variant),
+#   v2_blend_sem (O = 0.5 O_LORNet + 0.5 O_heuristic, fused), v2_sem_only (W = 1 - S).
+#
+# If Gate 0 / the SSR screening said NO-GO, run V1 without SSR for every variant:
+#   --set method.spatial_semantic.enabled=false   (S then comes from component A's image-level reliability)
+#
+# strength 0.5 below is a placeholder: the strength is selected on the SCREENING set with
+# v2_strength_screening.yaml + tools/sfroc_screening.py (pre-registered rule) and passed with
+#   --set method.sfr_oc.strength=<selected>
+# sigma = 3 latent px is a smooth Gaussian roll-off (half amplitude at a period of ~16 latent px, ~128 output
+# px), not a band limit. Fusion weights w_obs = w_sem = 0.5 are untuned.
+
+base_config: baseline.yaml
+
+# the ONE LORNet checkpoint used by every learned variant (override with --set method.sfr_oc.learned.checkpoint=...)
+lornet_checkpoint: &lornet experiments/training/runs/lornet_v1/checkpoints/best.pt
+
+default_variants: [original, combined_spatial, v2_heur, v2_learned, v2_heur_sem, v2_learned_sem, v2_uniform,
+                   v2_meanmatched, v2_shuffled, v2_zero]
+
+grid:
+  name_template: "{variant}_ddpm{num_inference_steps}_s{seed}"
+  description: "V2 ablation {variant}: DDPM {num_inference_steps} steps, per-image seeding, base seed {seed}."
+  fixed:
+    runtime.reseed_per_image: true
+  variants:
+    original: {}
+    combined_spatial: &v1
+      method.semantic_confidence.enabled: true
+      method.semantic_confidence.min_confidence: 0.7310585786300049
+      method.semantic_confidence.soft_scale_min: 0.5
+      method.semantic_confidence.soft_scale_max: 1.0
+      method.lr_guidance.enabled: true
+      method.lr_guidance.schedule: power
+      method.lr_guidance.scale_start: 1.25
+      method.lr_guidance.scale_end: 0.75
+      method.lr_guidance.gamma: 1.0
+      method.spatial_semantic.enabled: true
+      method.spatial_semantic.contrast: 1.0
+      method.spatial_semantic.smoothing_sigma: 1.0
+    v2_heur:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: observation
+    v2_learned:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: learned
+      method.sfr_oc.fusion.map: observation
+      method.sfr_oc.learned.checkpoint: *lornet
+    v2_heur_sem:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+    v2_learned_sem:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: learned
+      method.sfr_oc.fusion.map: fused
+      method.sfr_oc.learned.checkpoint: *lornet
+    v2_uniform:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: uniform
+    v2_meanmatched:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: learned
+      method.sfr_oc.fusion.map: mean_matched
+      method.sfr_oc.learned.checkpoint: *lornet
+    v2_shuffled:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: learned
+      method.sfr_oc.fusion.map: fused
+      method.sfr_oc.learned.checkpoint: *lornet
+      method.sfr_oc.fusion.control: shuffled
+    v2_zero:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.0
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: learned
+      method.sfr_oc.fusion.map: fused
+      method.sfr_oc.learned.checkpoint: *lornet
+    v2_global:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: full
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: uniform
+    v2_spatial:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: full
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+    v2_heur_sem_meanmatched:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: mean_matched
+    v2_heur_sem_shuffled:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+      method.sfr_oc.fusion.control: shuffled
+    v2_heur_sem_zero:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.0
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: fused
+    v2_blend_sem:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: blend
+      method.sfr_oc.fusion.map: fused
+      method.sfr_oc.learned.checkpoint: *lornet
+    v2_sem_only:
+      <<: *v1
+      method.sfr_oc.enabled: true
+      method.sfr_oc.strength: 0.5
+      method.sfr_oc.band: low
+      method.sfr_oc.reliability: heuristic
+      method.sfr_oc.fusion.map: semantic
+  axes:
+    inference.num_inference_steps: [50, 30, 20]
+    inference.seed: [42, 123, 2026]

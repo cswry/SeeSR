@@ -1,0 +1,46 @@
+# Separate efficiency experiment: can a different sampler reach similar quality with fewer UNet/ControlNet
+# evaluations? This does NOT change the main experiments, which keep the upstream DDPMScheduler.
+#
+# runtime.sampler_override makes the wrapper replace the loaded DDPMScheduler with Class.from_config(<the same scheduler config>)
+# (diffusers 0.21 defaults otherwise: DDIM eta = 0 via the pipeline's eta argument; DPM-Solver++ order 2).
+# Compatibility with pipelines/pipeline_seesr.py (set_timesteps, add_noise for the LR-embedded start, step()
+# signature and generator handling) is tested on a tiny instance of the real pipeline in tests/test_sfroc.py;
+# whether quality holds is exactly what this experiment measures. Note: the LR-embedded start always adds noise
+# at t = 999 (upstream start_steps), while the first executed timestep depends on the sampler.
+#
+# Per-image seeding as in track B. Each sampler is its own variant, so compare with
+#   python experiments/tools/compare_results.py sampling --allow_sampler_differences \
+#       --results_root <R>/efficiency/<ds> --dataset <ds> --reference_steps 50
+# Number of denoising evaluations = denoising_steps in per_image.csv (one CFG-batched UNet + ControlNet
+# call per step in the untiled path).
+#
+# original_ddpm50_s42 / original_ddpm20_s42 are identical to the sampling_sweep.yaml runs of the same name.
+# SFR-OC supports DDPMScheduler and DDIMScheduler only (DPM-Solver++ is rejected at configuration time); this
+# file measures the samplers alone, without any method component.
+#
+# Stochastic vs deterministic: DDPM adds fresh noise at every step, DDIM (eta = 0) and DPM-Solver++ do not. The
+# start latent is identical per image and seed, but trajectories are not comparable pixel by pixel; a DDPM - DDIM
+# difference mixes fewer steps with the removal of per-step noise. Compare metric distributions over seeds
+# (42 / 123 / 2026), report each sampler's seed spread, and do not read a smaller spread as a quality gain.
+
+base_config: baseline.yaml
+
+experiments:
+  - {name: original_ddpm50_s42, variant: original,
+     overrides: {runtime.reseed_per_image: true, inference.num_inference_steps: 50, inference.seed: 42}}
+  - {name: original_ddpm20_s42, variant: original,
+     overrides: {runtime.reseed_per_image: true, inference.num_inference_steps: 20, inference.seed: 42}}
+  - {name: original_ddpm10_s42, variant: original,
+     overrides: {runtime.reseed_per_image: true, inference.num_inference_steps: 10, inference.seed: 42}}
+  - {name: original_ddim20_s42, variant: original_ddim,
+     overrides: {runtime.reseed_per_image: true, runtime.sampler_override: DDIMScheduler,
+                 inference.num_inference_steps: 20, inference.seed: 42}}
+  - {name: original_ddim10_s42, variant: original_ddim,
+     overrides: {runtime.reseed_per_image: true, runtime.sampler_override: DDIMScheduler,
+                 inference.num_inference_steps: 10, inference.seed: 42}}
+  - {name: original_dpmpp20_s42, variant: original_dpmpp,
+     overrides: {runtime.reseed_per_image: true, runtime.sampler_override: DPMSolverMultistepScheduler,
+                 inference.num_inference_steps: 20, inference.seed: 42}}
+  - {name: original_dpmpp10_s42, variant: original_dpmpp,
+     overrides: {runtime.reseed_per_image: true, runtime.sampler_override: DPMSolverMultistepScheduler,
+                 inference.num_inference_steps: 10, inference.seed: 42}}

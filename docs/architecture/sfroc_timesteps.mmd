@@ -1,0 +1,28 @@
+%% Where SFR-OC acts in one reverse diffusion step (pipeline_seesr.py denoising loop). No extra UNet/ControlNet call.
+sequenceDiagram
+  autonumber
+  participant L as Denoising loop upstream
+  participant C as ControlNet frozen, V1 LR factor f(t)
+  participant U as UNet frozen, V1 soft-prompt hook
+  participant O as SFR-OC step wrapper V2
+  participant S as scheduler.step upstream DDPM or DDIM
+  Note over L: once per call - prepare_image builds W (heuristic or LORNet O, fused with S), the LR-start encode gives z_lr
+  loop each t in scheduler.timesteps, e.g. 981 to 1 at 50 steps, 951 to 1 at 20 steps
+    L->>C: x_t, t, LR image, prompts - CFG batch 2, per tile if tiled
+    C-->>L: down/mid residuals
+    L->>U: x_t, t, residuals, prompts
+    U-->>L: noise prediction (uncond, cond)
+    L->>L: CFG combine at scale 5.5, tiles blended to the full latent
+    L->>O: scheduler.step(model_output, t, x_t)
+    alt gamma(t) == 0
+      O->>S: original arguments (exact no-op)
+      S-->>O: x_(t-1)
+    else gamma(t) > 0
+      O->>O: x0 from model_output, Delta = gamma(t) LPF_h(W LPF_h(z_lr - x0))
+      O->>S: original model_output (unchanged dtype and noise draw)
+      S-->>O: x_(t-1)
+      O->>O: x_(t-1) + c0(t) Delta, pred_original_sample + Delta
+    end
+    O-->>L: x_(t-1)
+  end
+  Note over L: after the call - deferred checks and timings read once, then VAE decode and colour fix, upstream

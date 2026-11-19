@@ -1,0 +1,20 @@
+%% LORNet internal network (cfa_seesr/lornet.py). Green = trainable layers (33 049 parameters with the defaults);
+%% grey = fixed feature extraction (no parameters). DS = depthwise 3x3 + pointwise 1x1. GN = GroupNorm(4).
+flowchart TB
+  classDef fixed fill:#f6f6f6,stroke:#999,color:#111
+  classDef trained fill:#d7f5d0,stroke:#2e8b2e,stroke-width:2px,color:#111
+
+  IN["conditioning image 3 x H x W in 0..1<br/>(H, W multiples of 8; padded to 16 inside)"]:::fixed
+  IN --> F["features 4 x H x W (fixed)<br/>y luminance | gradient of G1 y | local contrast (G2 window)<br/>| high-frequency energy, scaled and clipped to 0..4"]:::fixed
+  F --> S["stem: conv 3x3 stride 2, 16 ch, SiLU<br/>H/2"]:::trained
+  S --> D1["DS stride 2 -> 24 ch, SiLU, ResDS<br/>H/4"]:::trained
+  D1 --> D2["DS stride 2 -> 32 ch, SiLU, ResDS<br/>H/8 (latent grid)"]:::trained
+  D2 --> D3["DS stride 2 -> 48 ch, SiLU, ResDS<br/>H/16"]:::trained
+  D3 --> CTX["multi-scale context: DS dilation 1, 2, 4 summed<br/>GN, SiLU, residual"]:::trained
+  CTX --> UP["bilinear x2 to H/8"]:::fixed
+  D2 -->|"skip"| CAT["concat 48 + 32"]:::fixed
+  UP --> CAT
+  CAT --> FU["1x1 conv -> 32 ch, ResDS"]:::trained
+  FU --> H["head: conv 3x3 16 ch, SiLU, conv 1x1"]:::trained
+  H --> SIG["sigmoid -> reliability 1 x H/8 x W/8 in (0, 1)"]:::fixed
+  H -.->|"optional uncertainty: true"| LV["log-variance 1 x H/8 x W/8<br/>(Gaussian NLL ablation)"]:::trained

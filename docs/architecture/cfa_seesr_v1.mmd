@@ -1,0 +1,28 @@
+%% CFA-SeeSR V1 (preserved). Dashed grey = frozen pretrained networks, light grey = upstream code (unchanged),
+%% blue = V1 additions (cfa_seesr/, attached by hooks only). Nothing is trained.
+flowchart LR
+  classDef frozen fill:#e3e3e3,stroke:#444,stroke-width:2px,stroke-dasharray:5 3,color:#111
+  classDef up fill:#f6f6f6,stroke:#999,color:#111
+  classDef v1 fill:#dbe9ff,stroke:#2a5db0,color:#111
+
+  LR["LR image"]:::up --> UPS["Bicubic upscale x4<br/>test_seesr.py"]:::up
+  LR --> DAPE["DAPE: RAMLora (frozen)<br/>Swin-L + tagging head<br/>one pass: condition_forward"]:::frozen
+  DAPE -->|"logits z, thresholds tau"| A["A: semantic confidence<br/>c_i = sigmoid((z_i - logit tau_i)/T)<br/>tag selection c_i > c_min, reliability C"]:::v1
+  DAPE -->|"tagging-head cross-attention<br/>4 x 4585 x 145"| SSR["SSR: spatial reliability map R 12x12<br/>mean L = C, contrast lambda"]:::v1
+  A --> SSR
+  A -->|"hard prompt tags"| CLIP["CLIP text encoder (frozen)"]:::frozen
+  DAPE -->|"image embeds 1x145x512"| SOFT["soft prompt"]:::up
+  UPS --> PREP["prepare_image"]:::up
+  PREP --> VAEE["VAE encode (frozen)<br/>LR-embedded start at t=999"]:::frozen
+  PREP --> CN["ControlNet (frozen)<br/>image_attentions + LR residuals"]:::frozen
+  CLIP --> UNET
+  CLIP --> CN
+  SOFT --> HOOK["soft-prompt residual scaling<br/>h + s(x)(f(h) - h)<br/>scalar s from A or map s(x) from SSR"]:::v1
+  HOOK --> UNET["UNet (frozen)<br/>image_attentions + text cross-attention"]:::frozen
+  HOOK --> CN
+  CN -->|"residuals x conditioning_scale x f(t)"| B["B: LR schedule f(t)<br/>wraps controlnet.forward"]:::v1
+  B --> UNET
+  VAEE --> LOOP
+  UNET --> CFG["CFG 5.5"]:::up --> LOOP["DDPMScheduler.step<br/>50 / 30 / 20 steps"]:::up
+  LOOP -->|"x_t-1"| UNET
+  LOOP --> DEC["VAE decode (frozen) + AdaIN colour fix"]:::frozen --> SR["SR image"]:::up

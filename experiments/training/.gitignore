@@ -1,0 +1,3 @@
+# LORNet outputs (cache, checkpoints, logs) are written outside git; keep them out of commits
+runs/
+__pycache__/
