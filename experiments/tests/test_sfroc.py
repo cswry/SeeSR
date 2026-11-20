@@ -300,30 +300,102 @@ def test_correction_changes_output_deterministically_without_extra_passes(pipe):
     assert n_unet == n_cn == 3                           # one CFG-batched call per step, as without SFR-OC
     assert np.array_equal(o1, o2) and not np.array_equal(o1, ref)
     summ = st.sfroc.summary()
-    assert summ["reference_source"] == "pipeline_encode" and summ["steps_corrected"] == 3
+    assert summ["reference_source"] == "extra_encode" and summ["steps_corrected"] == 3
     assert summ["prediction_type"] == "epsilon" and summ["W_min"] >= 0 and summ["W_max"] <= 1
 
 
-def test_reference_latent_equals_pipeline_posterior_mean(pipe):
-    img = _img(3)
-    seen = {}
+def _encode_spy(pipe, seen):
     original = pipe.vae.encode
 
     def spy(*a, **k):
         out = original(*a, **k)
-        seen.setdefault("mean", out.latent_dist.mean.detach().clone())
-        seen["n"] = seen.get("n", 0) + 1
+        seen.setdefault("means", []).append(out.latent_dist.mean.detach().clone())
+        seen.setdefault("inputs", []).append(a[0].detach().clone())
         return out
+    return spy
 
-    pipe.vae.encode = spy
+
+def test_reference_latent_pipeline_mode_reuses_the_pipeline_posterior(pipe):
+    """reference 'pipeline' (opt-in): no extra VAE pass; z_lr = posterior mean of the pipeline's LR encode."""
+    img = _img(3)
+    seen = {}
+    pipe.vae.encode = _encode_spy(pipe, seen)
     try:
-        cfg = SFROCConfig(enabled=True, strength=0.5, schedule="constant")
+        cfg = SFROCConfig(enabled=True, strength=0.5, schedule="constant", reference="pipeline")
         st = _with_sfroc(pipe, cfg, lambda s: (_run(pipe, img), s)[1])
     finally:
         del pipe.vae.encode
-    assert seen["n"] == 1                                # no extra VAE pass with start_point 'lr'
-    expected = seen["mean"][0:1].float() * pipe.vae.config.scaling_factor
-    assert torch.allclose(st.sfroc.z_ref, expected)
+    assert len(seen["means"]) == 1                       # no extra VAE pass with start_point 'lr'
+    expected = seen["means"][0][0:1].float() * pipe.vae.config.scaling_factor
+    assert torch.allclose(st.sfroc.z_ref, expected) and st.sfroc.reference_source == "pipeline_encode"
+    assert "reference_cfg_identical" in st.sfroc.checks  # the deferred CFG check is kept in this mode
+
+
+def test_reference_latent_default_encodes_conditioning_item_0(pipe):
+    """reference 'extra_encode' (default since 2.1.1, as run in the V2.1 heuristic pilot): one extra VAE encode of
+    batch item 0 of the conditioning image, posterior mean x scaling_factor."""
+    img = _img(3)
+    seen = {}
+    pipe.vae.encode = _encode_spy(pipe, seen)
+    try:
+        cfg = SFROCConfig(enabled=True, strength=0.5, schedule="constant")
+        assert cfg.reference == "extra_encode"
+        st = _with_sfroc(pipe, cfg, lambda s: (_run(pipe, img), s)[1])
+    finally:
+        del pipe.vae.encode
+    assert len(seen["means"]) == 2                       # pipeline's LR start + one reference encode
+    assert seen["inputs"][1].shape[0] == 1
+    assert torch.equal(seen["inputs"][1], (st.sfroc.image[0:1] * 2 - 1).to(seen["inputs"][1].dtype))
+    expected = seen["means"][1].float() * pipe.vae.config.scaling_factor
+    assert torch.equal(st.sfroc.z_ref, expected) and st.sfroc.reference_source == "extra_encode"
+    assert bool(st.sfroc.checks["cfg_batch_identical"])  # the image's CFG copies are still checked
+    st.sfroc.summary()                                   # all deferred checks pass
+
+
+def test_reference_pipeline_mode_reports_differing_cfg_rows(pipe):
+    """The opt-in mode keeps the strict check: differing posterior rows fail summary()."""
+    import types
+    from cfa_seesr.hooks import MethodHooks, MethodState
+    hooks, state = MethodHooks(), MethodState()
+    ctrl = hooks.install_observation_consistency(pipe, SFROCConfig(enabled=True, strength=0.5, reference="pipeline"),
+                                                 state)
+    try:
+        ctrl.image = torch.rand(2, 3, 64, 64)
+        ctrl.W = torch.ones(1, 1, 8, 8)
+        mean = torch.randn(2, 4, 8, 8)
+        ctrl.encode_dist = types.SimpleNamespace(mean=mean)
+        pipe.scheduler.set_timesteps(3)
+        xt, mo = torch.randn(1, 4, 8, 8), torch.randn(1, 4, 8, 8)
+        pipe.scheduler.step(mo, pipe.scheduler.timesteps[0], xt)
+        with pytest.raises(RuntimeError, match="reference_cfg_identical"):
+            ctrl.summary()
+    finally:
+        hooks.remove()
+
+
+def test_correction_time_excludes_the_reference_encode(pipe):
+    """The V2.1 heuristic pilot reported correction_ms ~ encode_ms because the first corrected step's timer also
+    covered the reference encode. The encode is now timed only as encode_ms."""
+    import time
+    original = pipe.vae.encode
+
+    def slow(*a, **k):
+        time.sleep(0.2)
+        return original(*a, **k)
+
+    pipe.vae.encode = slow
+    try:
+        cfg = SFROCConfig(enabled=True, strength=0.5, schedule="constant")
+        st = _with_sfroc(pipe, cfg, lambda s: (_run(pipe, _img(5)), s)[1])
+    finally:
+        del pipe.vae.encode
+    summ = st.sfroc.summary()
+    assert summ["encode_ms"] >= 190 and summ["correction_ms"] < 150
+
+
+def test_reference_auto_is_rejected():
+    with pytest.raises(ValueError, match="removed in 2.1.1"):
+        SFROCConfig(enabled=True, strength=0.5, reference="auto")
 
 
 def test_noise_start_uses_one_extra_encode(pipe):
@@ -444,7 +516,7 @@ def test_v2_zero_equals_v1_and_full_differs_through_the_runner(pipe, upstream_te
     assert np.array_equal(zero, v1)                      # no-op control reproduces V1 exactly
     assert not np.array_equal(full, v1)
     row = rec.rows[0]
-    assert row["sfroc_steps_corrected"] == 3 and row["sfroc_reference"] == "pipeline_encode"
+    assert row["sfroc_steps_corrected"] == 3 and row["sfroc_reference"] == "extra_encode"
     assert 0 <= row["sfroc_W_min"] <= row["sfroc_W_mean"] <= row["sfroc_W_max"] <= 1
     assert rec0.rows[0]["sfroc_steps_corrected"] == 0
     r = rec.sfroc_records[0]

@@ -19,8 +19,8 @@ flowchart TB
     OSEL --> FU["W = clip(w_obs O + w_sem (1 - S) + bias)<br/>controls: uniform, mean_matched (W = mean W),<br/>shuffled (row/column band permutation)"]:::v2
   end
 
-  subgraph ENC["pipeline LR-start encode, captured by the vae.encode wrapper"]
-    VE["vae.encode(2 image - 1)"]:::up --> ZR["z_lr = posterior mean[0:1] x scaling_factor<br/>deferred check: CFG rows identical"]:::v2
+  subgraph ENC["reference latent, once per call (reference: extra_encode)"]
+    VE["vae.encode(2 image[0:1] - 1)<br/>(reference: pipeline reuses the LR-start posterior)"]:::up --> ZR["z_lr = posterior mean x scaling_factor"]:::v2
   end
 
   subgraph STEP["every scheduler.step(model_output, t, x_t)"]

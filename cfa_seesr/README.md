@@ -320,7 +320,7 @@ screening decide.
 trustworthy, while leaving high-frequency detail to the generative prior. No UNet/ControlNet pass is added; off by
 default (`method.sfr_oc.enabled: false`, `strength: 0`). Related work and the precise hypothesis:
 `docs/related_work_v2.md` (closest prior idea: ILVR's low-frequency consistency; SFR-OC is not claimed novel on its
-own). Formulation version: `cfa_seesr.METHOD_VERSION` (2.1.0), recorded with `signature: cfa-seesr-v2` in every
+own). Formulation version: `cfa_seesr.METHOD_VERSION` (2.1.1), recorded with `signature: cfa-seesr-v2` in every
 `run_metadata.json`.
 
 ### Part A: observation reliability O (`observation_reliability.py`, heuristic; or LORNet, §13)
@@ -402,9 +402,11 @@ the runner: `v2_zero` / `v2_heur_sem_zero` == `combined_spatial`).
 
 *Safeguards.* Supported: `DDPMScheduler`, `DDIMScheduler`; prediction types epsilon / v_prediction / sample. Rejected
 at installation and at configuration time: other schedulers, learned variance (`variance_type: learned*`),
-`thresholding: true`, `clip_sample: true`. The reference latent takes the posterior of the pipeline's own LR encode
-(no extra VAE pass); the CFG copies of the conditioning image and of that posterior are checked to be identical
-before batch item 0 is used. Tiled sampling: the step sees the blended full latent (tested).
+`thresholding: true`, `clip_sample: true`. The reference latent is the posterior mean of one VAE encode of batch
+item 0 of the conditioning image (`reference: extra_encode`, default since 2.1.1; one VAE encoder pass per image);
+the CFG copies of the conditioning image are checked to be identical before item 0 is used. `reference: pipeline`
+reuses the pipeline's own LR-start posterior instead (no extra pass) and checks its CFG rows: in the V2.1 heuristic
+pilot (T4, V1 enabled) those rows were not bit-identical (cause not isolated), so it is opt-in. Tiled sampling: the step sees the blended full latent (tested).
 
 *Synchronisation and timing.* During denoising nothing is converted to a Python value: the timestep is read from a
 host copy of `scheduler.timesteps` (taken once per call; agreement with the passed tensor is a deferred device check),
@@ -428,7 +430,8 @@ exercised on this development machine (no GPU); the CPU path and the absence of 
 All values are initial and untuned except the strength, which is selected on held-out validation images by the
 pre-registered rule of `experiments/tools/sfroc_screening.py`.
 
-**Overhead.** No UNet/ControlNet pass (asserted in tests). Per image: one map analysis (or one LORNet pass) plus,
+**Overhead.** No UNet/ControlNet pass (asserted in tests). Per image: one VAE encoder pass for z_lr, one map analysis
+(or one LORNet pass) plus,
 per corrected step, two low-passes of a `[1,4,h,w]` latent and element-wise operations. CPU reference on this
 development machine (not a GPU claim): 512² image, latent 64²: heuristic analysis ≈ 16 ms, LORNet ≈ 37 ms,
 correction ≈ 0.8 ms per step. GPU numbers: `experiments/tools/benchmark_sfroc.py` and `sfroc_*_ms` in `per_image.csv`.

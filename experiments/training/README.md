@@ -7,6 +7,9 @@ network and training diagrams: `docs/ARCHITECTURE.md` (C, D). Colab: `experiment
 Nothing of SeeSR is trained or back-propagated through. `cache` loads only the SD2 VAE (frozen, `no_grad`, fp16
 on CUDA); `train` and `evaluate` read the cache.
 
+Configurations: `configs/lornet.yaml` (RealSR V3 + DRealSR training splits) and `configs/lornet_realsr_v3.yaml`
+(RealSR V3 only: the configuration of the pilot checkpoint `lornet_v1`; outcome in `assets/training/`).
+
 ## Data and leakage rules
 
 | Rule | Where enforced |

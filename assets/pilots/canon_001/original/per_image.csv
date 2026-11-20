@@ -1,0 +1,2 @@
+image,process_height,process_width,prompt_s,diffusion_s_mean,n_samples,total_s,denoising_steps,first_t,last_t,seed,peak_vram_mb,peak_vram_reserved_mb,hard_prompt
+Canon_001_LR4,512,512,1.6244,20.7563,1,22.3807,30,958,1,,6863,6926,"wall, building, cigarette, sign, smoke, street sign, tile wall, ,"

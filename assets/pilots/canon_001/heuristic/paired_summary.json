@@ -1,0 +1,98 @@
+{
+  "created_at": "2026-11-20T10:52:22+00:00",
+  "git": {
+    "commit": "19ac39ea94cd448cacedbd58998b425a809d8938",
+    "branch": "research/cfa-seesr-v2",
+    "tracked_changes": true,
+    "uncommitted_files": [
+      "fa_seesr/hooks.py",
+      "cfa_seesr/observation_reliability.py",
+      "cfa_seesr/spatial_reliability.py",
+      "experiments/run_inference.py",
+      "experiments/configs/colab_heuristic_pilot.yaml",
+      "preset/models"
+    ]
+  },
+  "packages": {
+    "torch": "2.0.1+cu118",
+    "diffusers": "0.21.0",
+    "transformers": "4.25.0",
+    "accelerate": "0.25.0",
+    "xformers": "0.0.20",
+    "pyiqa": "0.1.10",
+    "numpy": "1.26.4",
+    "Pillow": "12.3.0"
+  },
+  "device": "cuda",
+  "sr_dir": "<DRIVE_ROOT>/results/realsr_heuristic_pilot/realsr_heuristic_pilot/sr/sample00",
+  "n_sr_files": 1,
+  "strip_suffixes": [],
+  "std_definition": "population standard deviation (ddof=0) over successfully evaluated images",
+  "mode": "paired",
+  "gt_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_gt",
+  "n_gt_files": 1,
+  "n_pairs_matched": 1,
+  "n_evaluated_ok": 1,
+  "n_errors": 0,
+  "evaluated": true,
+  "missing_gt": [],
+  "missing_sr": [],
+  "duplicates": {
+    "sr": {},
+    "gt": {}
+  },
+  "problems": [],
+  "warnings": [],
+  "metrics": {
+    "psnr": {
+      "pyiqa_name": "psnr",
+      "lower_better": false,
+      "test_y_channel": true,
+      "crop_border": 0
+    },
+    "ssim": {
+      "pyiqa_name": "ssim",
+      "lower_better": false,
+      "test_y_channel": true,
+      "crop_border": 0
+    },
+    "lpips": {
+      "pyiqa_name": "lpips",
+      "lower_better": true
+    },
+    "dists": {
+      "pyiqa_name": "dists",
+      "lower_better": true
+    }
+  },
+  "aggregate": {
+    "psnr": {
+      "n": 1,
+      "mean": 26.000076293945312,
+      "std": 0.0,
+      "min": 26.000076293945312,
+      "max": 26.000076293945312
+    },
+    "ssim": {
+      "n": 1,
+      "mean": 0.8842737338088469,
+      "std": 0.0,
+      "min": 0.8842737338088469,
+      "max": 0.8842737338088469
+    },
+    "lpips": {
+      "n": 1,
+      "mean": 0.20232602953910828,
+      "std": 0.0,
+      "min": 0.20232602953910828,
+      "max": 0.20232602953910828
+    },
+    "dists": {
+      "n": 1,
+      "mean": 0.19529366493225098,
+      "std": 0.0,
+      "min": 0.19529366493225098,
+      "max": 0.19529366493225098
+    }
+  }
+}

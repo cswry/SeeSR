@@ -1,0 +1,94 @@
+{
+  "created_at": "2026-11-19T20:37:44+00:00",
+  "git": {
+    "commit": "77e664ffb163a590d8d9694cbaf4524cf85bbea4",
+    "branch": "research/cfa-seesr-v2",
+    "tracked_changes": false,
+    "uncommitted_files": [
+      "experiments/configs/colab_realsr_pilot.yaml",
+      "preset/models"
+    ]
+  },
+  "packages": {
+    "torch": "2.0.1+cu118",
+    "diffusers": "0.21.0",
+    "transformers": "4.25.0",
+    "accelerate": "0.25.0",
+    "xformers": "0.0.20",
+    "pyiqa": "0.1.10",
+    "numpy": "1.26.4",
+    "Pillow": "12.3.0"
+  },
+  "device": "cuda",
+  "sr_dir": "<DRIVE_ROOT>/results/realsr_single_image_pilot/sr/sample00",
+  "n_sr_files": 1,
+  "strip_suffixes": [],
+  "std_definition": "population standard deviation (ddof=0) over successfully evaluated images",
+  "mode": "paired",
+  "gt_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_gt",
+  "n_gt_files": 1,
+  "n_pairs_matched": 1,
+  "n_evaluated_ok": 1,
+  "n_errors": 0,
+  "evaluated": true,
+  "missing_gt": [],
+  "missing_sr": [],
+  "duplicates": {
+    "sr": {},
+    "gt": {}
+  },
+  "problems": [],
+  "warnings": [],
+  "metrics": {
+    "psnr": {
+      "pyiqa_name": "psnr",
+      "lower_better": false,
+      "test_y_channel": true,
+      "crop_border": 0
+    },
+    "ssim": {
+      "pyiqa_name": "ssim",
+      "lower_better": false,
+      "test_y_channel": true,
+      "crop_border": 0
+    },
+    "lpips": {
+      "pyiqa_name": "lpips",
+      "lower_better": true
+    },
+    "dists": {
+      "pyiqa_name": "dists",
+      "lower_better": true
+    }
+  },
+  "aggregate": {
+    "psnr": {
+      "n": 1,
+      "mean": 26.441478729248047,
+      "std": 0.0,
+      "min": 26.441478729248047,
+      "max": 26.441478729248047
+    },
+    "ssim": {
+      "n": 1,
+      "mean": 0.8762786579397924,
+      "std": 0.0,
+      "min": 0.8762786579397924,
+      "max": 0.8762786579397924
+    },
+    "lpips": {
+      "n": 1,
+      "mean": 0.17949043214321136,
+      "std": 0.0,
+      "min": 0.17949043214321136,
+      "max": 0.17949043214321136
+    },
+    "dists": {
+      "n": 1,
+      "mean": 0.1713731288909912,
+      "std": 0.0,
+      "min": 0.1713731288909912,
+      "max": 0.1713731288909912
+    }
+  }
+}

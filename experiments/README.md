@@ -42,7 +42,8 @@ experiments/
     sfroc_screening.py      V2: pre-registered strength selection from the screening runs
     sfroc_map_validity.py   V2: do the maps predict where the LR correction lowers the latent error? (V1 outputs)
   training/                 V2: LORNet training (README.md there): data/leakage rules, latent cache, train,
-                            evaluate, make_screening_set.py, configs/lornet.yaml
+                            evaluate, make_screening_set.py, configs/lornet.yaml, configs/lornet_realsr_v3.yaml
+    pilot_report.py         V2.1 single-image pilot: README/CSV check, metadata sanitising, figures
   notebooks/
     seesr_evaluation.ipynb  Colab: GPU check, pinned env, validation, smoke tests, tracks A and B, evaluation, V2
     lornet_training.ipynb   Colab (T4): LORNet cache / train / evaluate, V2 screening images
@@ -260,7 +261,9 @@ blurring where the map is low.
 ## 5b. V2: SFR-OC with heuristic or learned (LORNet) reliability
 
 Design, maths and limitations: `cfa_seesr/README.md` §12-13; diagrams: `docs/ARCHITECTURE.md`; related work:
-`docs/related_work_v2.md`. Order of work (each step only after the previous one):
+`docs/related_work_v2.md`. Status (2.1.1): step 1 has produced the pilot checkpoint `lornet_v1`; steps 2-4 are
+planned and configured but have not been run (see `docs/results.md`). Order of work (each step only after the
+previous one):
 
 1. **Train LORNet** (`training/README.md`, `notebooks/lornet_training.ipynb`): training splits only; writes
    `checkpoints/best.pt` and the V2 screening images (its *validation* split; never test images).

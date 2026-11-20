@@ -1,0 +1,2 @@
+image,sr_file,gt_file,height,width,psnr,ssim,lpips,dists,status,notes
+Canon_001_LR4,Canon_001_LR4.png,Canon_001_LR4.png,512,512,26.441478729248047,0.8762786579397924,0.17949043214321136,0.1713731288909912,ok,

@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 PY="${PYTHON:-python}"
-export PYTHONDONTWRITEBYTECODE=1  # upstream tracks __pycache__/*.pyc in git
+export PYTHONDONTWRITEBYTECODE=1  # keep the tree free of .pyc files
 mode="${1:?usage: run_inference.sh baseline|sweep|v2|efficiency [extra args]}"; shift
 log_dir="${LOG_DIR:-experiments/logs}"   # set LOG_DIR to keep logs on persistent storage
 mkdir -p "$log_dir"

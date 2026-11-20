@@ -11,7 +11,8 @@
 * SSR tile tracking: wraps `pipe.prepare_image` (records the full conditioning image and the latent size)
   and `controlnet.forward` (identifies the tile of each call, see install_spatial_tracking).
 * SFR-OC (V2, observation_consistency.py): wraps `pipe.prepare_image` (builds the reliability maps at
-  latent resolution; heuristic and/or LORNet, loaded from a validated checkpoint at installation), `pipe.vae.encode` (captures the pipeline's own LR posterior: no extra VAE pass) and
+  latent resolution; heuristic and/or LORNet, loaded from a validated checkpoint at installation), `pipe.vae.encode` (captures the pipeline's own LR posterior for
+  `reference: pipeline`; the default `extra_encode` encodes the conditioning image once more) and
   `pipe.scheduler.step` (runs the unchanged step on the unchanged model output and adds c0(t) * Delta to its
   result; see observation_consistency.py). No UNet or ControlNet call is added.
 
@@ -237,19 +238,23 @@ class MethodHooks:
         def reference_latent(sample):
             if ctrl.z_ref is None:
                 vae = pipe.vae
-                dist = ctrl.encode_dist if cfg.reference == "auto" else None
-                if dist is not None:
+                if cfg.reference == "pipeline":                # opt-in: reuse the pipeline's own LR encode
+                    dist = ctrl.encode_dist
+                    if dist is None:
+                        raise RuntimeError("SFR-OC: reference 'pipeline' needs the pipeline's LR-start encode "
+                                           "(start_point 'lr'); use reference 'extra_encode'")
                     ctrl.reference_source = "pipeline_encode"
                     mean = dist.mean
-                else:
+                    if mean.shape[0] > 1:                      # CFG copies of the same image: deferred check
+                        ctrl.checks["reference_cfg_identical"] = (mean == mean[0:1]).all()
+                else:                                          # default: encode conditioning item 0 once
+                    # (its CFG copies are checked identical when the maps are built: cfg_batch_identical)
                     ctrl.encode_timer.start(sample.device)
                     with torch.no_grad():
                         x = (ctrl.image[0:1] * 2 - 1).to(device=vae.device, dtype=vae.dtype)
                         mean = original_encode(x).latent_dist.mean
                     ctrl.encode_timer.stop()
                     ctrl.reference_source = "extra_encode"
-                if mean.shape[0] > 1:                          # CFG copies of the same image: deferred check
-                    ctrl.checks["reference_cfg_identical"] = (mean == mean[0:1]).all()
                 ctrl.z_ref = (mean[0:1].float() * vae.config.scaling_factor).detach()
             if tuple(ctrl.z_ref.shape[-2:]) != tuple(sample.shape[-2:]):
                 raise RuntimeError(f"SFR-OC: reference latent {tuple(ctrl.z_ref.shape)} does not match the "
@@ -276,8 +281,8 @@ class MethodHooks:
             a_t = float(scheduler.alphas_cumprod[t])           # host tensor on CPU in diffusers: no device sync
             if not 0.0 < a_t < 1.0:
                 raise ValueError(f"SFR-OC: alphas_cumprod[{t}] = {a_t} is outside (0, 1)")
+            z_ref = reference_latent(sample)                  # timed separately (encode_ms), not as correction
             ctrl.correction_timer.start(sample.device)
-            z_ref = reference_latent(sample)
             delta, x0, r = correction_delta(model_output, sample, a_t, z_ref, ctrl.W, gamma, cfg, prediction_type)
             diag = step_diagnostics(t, gamma, r, delta)
             if cfg.precision in ("output", "output_carry"):

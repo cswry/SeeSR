@@ -1,4 +1,4 @@
-# CFA-SeeSR architecture: V1 (preserved) and V2 (SFR-OC + LORNet)
+# CFA-SeeSR architecture: V1 (preserved) and V2.1 (SFR-OC + LORNet)
 
 Legend used in every diagram:
 
@@ -18,6 +18,29 @@ upstream file is edited, and each component is off unless its config section ena
 Related work and hypotheses: [`related_work_v2.md`](related_work_v2.md). Method details:
 [`../cfa_seesr/README.md`](../cfa_seesr/README.md) (§12 SFR-OC, §13 LORNet). Experiments:
 [`../experiments/README.md`](../experiments/README.md); training: [`../experiments/training/README.md`](../experiments/training/README.md).
+
+## Implementation map
+
+| File | Role | Used by |
+|---|---|---|
+| `cfa_seesr/__init__.py` | `MethodConfig` (all sections), `METHOD_VERSION`, `method_signature` | runner, hooks |
+| `cfa_seesr/hooks.py` | attaches / removes every component on a loaded pipeline (wrappers and forward hooks only) | runner |
+| `cfa_seesr/semantic_confidence.py` | A: tag confidence, selection, reliability C, soft-prompt scale | hooks, SSR |
+| `cfa_seesr/lr_guidance.py` | B: f(t) for the ControlNet residual scale | hooks |
+| `cfa_seesr/spatial_reliability.py` | SSR: attention capture, reliability grid, latent-resolution map, tiles | hooks, Gate 0 tool |
+| `cfa_seesr/observation_reliability.py` | heuristic O, noise estimate | SFR-OC controller, tools, LORNet evaluation |
+| `cfa_seesr/lornet.py` | LORNet model, features, validated checkpoint loading | SFR-OC controller, training |
+| `cfa_seesr/latent_targets.py` | upstream-identical resizing, VAE encoding, teacher target, counterfactual benefit | training, map-validity tool |
+| `cfa_seesr/frequency.py` | Gaussian / padded-FFT low-pass, two-pass split | SFR-OC |
+| `cfa_seesr/observation_consistency.py` | SFR-OC config, fusion and controls, Δ, c₀(t), deferred checks, timers, per-call controller | hooks |
+| `experiments/run_inference.py` | config → upstream `test_seesr.main()`, hook installation, metadata | users, notebooks |
+| `experiments/training/` | LORNet data guards, cache, training, evaluation, screening-set export | users, notebook |
+| `experiments/evaluation/`, `experiments/tools/` | metrics, comparisons, screening, benchmarks, pilot report | users, notebooks |
+
+Interaction per image: the runner calls upstream `test_seesr.main()`; the prompt hook (A, SSR) runs during DAPE;
+`prepare_image` triggers the SFR-OC map (heuristic and/or LORNet, fused with SSR's map); every ControlNet call gets
+B's factor; every image-attention block gets the soft-prompt scale; every `scheduler.step` gets the SFR-OC
+correction; after the call the runner reads each component's summary (deferred checks, timings) into the metadata.
 
 ## A. CFA-SeeSR V1 (preserved)
 
@@ -45,9 +68,11 @@ Source: [`architecture/cfa_seesr_v2.mmd`](architecture/cfa_seesr_v2.mmd).
 | Reliability fusion | `observation_consistency.fuse` | once per call | W at latent resolution (fused / observation / uniform / mean_matched / shuffled) |
 | Frequency-selective correction | `observation_consistency.correction_delta`, `x0_coefficient`, `apply_to_step_output`; `scheduler.step` wrapper | every reverse step with γ(t) > 0 | x_{t−1} + c₀(t)·Δ, Δ = γ LPF_h(W ⊙ LPF_h(z_lr − x̂₀)) |
 
-The reference latent z_lr is the posterior **mean** of the VAE encode the pipeline already performs for its
-LR-embedded start (captured by a `vae.encode` wrapper): same VAE, same `scaling_factor`, no extra pass and no extra RNG
-draw (with `start_point: noise` one extra encode is made and recorded). With `reliability: learned` the run refuses
+The reference latent z_lr is the posterior **mean** of one VAE encode of the conditioning image (batch item 0),
+times `scaling_factor`: the same VAE and scaling as the pipeline's LR-embedded start, deterministic, no extra RNG draw
+(`sfr_oc.reference: extra_encode`, the default since 2.1.1, used by the heuristic pilot). Reusing the pipeline's own
+LR-start posterior is available as `reference: pipeline` (what the learned pilot used); in the heuristic pilot that
+posterior's two CFG rows were not bit-identical and failed the deferred check, which led to the change. With `reliability: learned` the run refuses
 to start unless the LORNet checkpoint validates (format, version, configuration, τ, finite weights, strict match).
 
 ## C. LORNet internal network
@@ -88,11 +113,11 @@ loop; deferred checks and CUDA-event timings are read once after the call.
 | Where it acts | prompt selection, soft-prompt residual (A, SSR), ControlNet residual scale (B) | + output of `scheduler.step` (equivalently the predicted clean latent) |
 | Frequency selectivity | none | two-pass Gaussian (or padded FFT) low-pass; half amplitude at ≈ 16 latent px ≈ 128 output px for σ = 3 |
 | Spatial selectivity | SSR (semantic reliability) | + fused map of observation and semantic reliability, with mean-matched and shuffled controls |
-| Extra network passes | none (A saves one DAPE pass) | none of SeeSR's; one LORNet pass per image if learned (33 k parameters) |
+| Extra network passes | none (A saves one DAPE pass) | no UNet/ControlNet pass; one VAE encoder pass per image (reference latent); one LORNet pass per image if learned (33 k parameters) |
 | Extra computation | negligible | analysis or LORNet once per image + two low-passes per corrected step (`tools/benchmark_sfroc.py`) |
 | Trainable parameters | 0 | 0 (heuristic) or 33 049 (LORNet, trained offline; SeeSR frozen) |
 | Default | off | off (`sfr_oc.enabled: false`, `strength: 0`, `reliability: heuristic`) |
-| Version recorded | `method.version` 2.1.0, `signature: cfa-seesr-v1` | `signature: cfa-seesr-v2`, formulation string, LORNet path / SHA-256 / τ |
+| Version recorded | `method.version` 2.1.1, `signature: cfa-seesr-v1` | `signature: cfa-seesr-v2`, formulation string, LORNet path / SHA-256 / τ |
 
 ## Configuration map
 

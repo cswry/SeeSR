@@ -1,0 +1,32 @@
+{
+  "source": "stdout of `train_lornet.py cache` and `train_lornet.py train`, saved in the Colab notebook committed at 19ac39e (phase2-baseline/experiments/notebooks/seesr_evaluation.ipynb, cells 9-10)",
+  "gpu": "Tesla T4 (15360 MiB)",
+  "software": {
+    "python": "3.10.22",
+    "torch": "2.0.1+cu117",
+    "diffusers": "0.21.0",
+    "transformers": "4.25.0",
+    "xformers": "0.0.22"
+  },
+  "code": "research/cfa-seesr-v2 @ 77e664f, the commit cloned in that notebook (method version 2.1.0)",
+  "config": "experiments/training/configs/lornet.yaml with the DRealSR source removed (= experiments/training/configs/lornet_realsr_v3.yaml)",
+  "data": {
+    "sources": [
+      "RealSR V3 Canon/Train/4",
+      "RealSR V3 Nikon/Train/4"
+    ],
+    "pairs": 400,
+    "train_images": 368,
+    "val_images": 32,
+    "train_crops": 1088,
+    "val_crops": 101
+  },
+  "tau": 0.32633,
+  "epochs_run": 12,
+  "early_stopping": "epoch 11 (patience 8)",
+  "best_epoch": 3,
+  "best_val_loss": 0.11151201905000328,
+  "seconds_per_epoch_mean": 14.06,
+  "note": "Checkpoint and latent cache were written inside the Colab runtime (experiments/training/runs/lornet_v1); they are not part of the repository.",
+  "software_note": "as printed by the environment check of the same notebook (cell 17); the training cells themselves do not print versions"
+}

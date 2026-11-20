@@ -1,4 +1,44 @@
-
+# --- Python / environments -------------------------------------------------
 .venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-.venv/
+# --- Notebooks and editors -------------------------------------------------
+.ipynb_checkpoints/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Weights and checkpoints (download separately; see docs/reproducibility.md)
+preset/models/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+
+# --- Data and generated outputs --------------------------------------------
+/datasets/
+preset/datasets/*
+!preset/datasets/test_datasets/
+/results/
+/results-*/
+/results-*.zip
+experiments/results/*
+!experiments/results/.gitkeep
+experiments/logs/*
+!experiments/logs/.gitkeep
+experiments/training/runs/
+
+# --- Colab / local configuration with private paths ------------------------
+experiments/training/configs/colab_*.yaml
+*.env
+.env*

@@ -167,6 +167,7 @@ def low_gradient_mask(y, q=0.5):
     import torch
     gx, gy = _sobel(_blur(y, 2.0))
     g = (gx * gx + gy * gy).sqrt()
+    g = g.float()          # torch.quantile accepts only float32/float64 (fp16 under CUDA autocast failed)
     return g <= torch.quantile(g.flatten(), q)
 
 

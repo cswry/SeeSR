@@ -30,7 +30,9 @@ SECTIONS = ("semantic_confidence", "lr_guidance", "spatial_semantic", "sfr_oc")
 
 # Version of this package's formulation, recorded in run_metadata.json. 2.1: audit remediation of SFR-OC
 # (two-pass band-limited Delta, output-space application, noise-compensated observation reliability).
-METHOD_VERSION = "2.1.0"
+# 2.1.1: GPU runtime fixes from the V2.1 Colab pilots (device/dtype in SSR, fp16-safe quantile, CPU copy of the
+# SSR grid before saving) and sfr_oc.reference default 'extra_encode' ('auto' removed).
+METHOD_VERSION = "2.1.1"
 
 
 def method_signature(method):

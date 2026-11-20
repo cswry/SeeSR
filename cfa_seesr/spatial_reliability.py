@@ -159,8 +159,9 @@ def gaussian_smooth(grid, sigma):
     if sigma <= 0:
         return grid.clone()
     radius = max(1, int(math.ceil(3 * sigma)))
-    x = torch.arange(-radius, radius + 1, dtype=torch.float64)
-    k = torch.exp(-0.5 * (x / sigma) ** 2)
+    # kernel on the grid's device (the grid lives on the GPU when DAPE runs there)
+    x = torch.arange(-radius, radius + 1, dtype=torch.float64, device=grid.device)
+    k = torch.exp(-0.5 * (x / sigma) ** 2).to(grid.dtype)
     k = k / k.sum()
     t = grid[None, None]
     t = F.pad(t, (radius, radius, radius, radius), mode="replicate")
@@ -190,10 +191,12 @@ def reliability_grid(maps, conf_hat, global_reliability, level, cfg, key=""):
     stats = {"n_tags": n, "grid": g, "level": L, "global_reliability": C, "contrast": cfg.contrast,
              "control": cfg.control}
     if n == 0:   # no tag: no spatial evidence, R = L everywhere
-        R = torch.full((g, g), L, dtype=torch.float64)
+        R = torch.full((g, g), L, dtype=torch.float64, device=maps.device)
         stats.update(fallback="no_tags", coverage_mean=0.0)
         return R, _finish(R, R, stats)
-    w = torch.as_tensor(conf_hat, dtype=torch.float64).clamp(0.0, 1.0)
+    # confidences on the attention maps' device and dtype (float64 from tag_attention_maps; on the GPU when
+    # DAPE runs there: a CPU tensor here failed with a device mismatch in the Colab V2.1 pilot)
+    w = torch.as_tensor(conf_hat, dtype=maps.dtype, device=maps.device).clamp(0.0, 1.0)
     mass = maps.sum(dim=0)                                                  # sum_i A_i(g)
     rho = (maps * w[:, None, None]).sum(dim=0) / (mass + cfg.eps)
     kappa = (mass * (g * g) / n).clamp(max=1.0)

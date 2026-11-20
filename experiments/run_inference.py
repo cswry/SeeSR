@@ -372,7 +372,7 @@ def install_hooks(test_seesr, recorder, timings):
                 row["soft_scale"] = spatial.soft_scale
             recorder.spatial_records.append({"image": row["image"], **spatial.summary()})
             if spatial.grid is not None:
-                recorder.spatial_grids[row["image"]] = spatial.grid.numpy()
+                recorder.spatial_grids[row["image"]] = grid_to_numpy(spatial.grid)
         return prompt, embeds
 
     test_seesr.load_seesr_pipeline = load_pipeline
@@ -590,6 +590,11 @@ def runtime_snapshot(pipe):
             snap[f"{name}_attention_processors"] = sorted({type(p).__name__ for p in procs.values()})
     snap["unet_use_image_cross_attention"] = getattr(pipe.unet.config, "use_image_cross_attention", None)
     return snap
+
+
+def grid_to_numpy(grid):
+    """SSR grid -> numpy for spatial_maps.npz. The grid lives on DAPE's device (the GPU in real runs)."""
+    return grid.detach().cpu().numpy()
 
 
 def _method_version():

@@ -1,0 +1,399 @@
+{
+  "experiment": {
+    "name": "realsr_lornet_learned_pilot"
+  },
+  "status": "completed",
+  "started_at": "2026-11-19T23:56:53+00:00",
+  "git": {
+    "commit": "77e664ffb163a590d8d9694cbaf4524cf85bbea4",
+    "branch": "research/cfa-seesr-v2",
+    "tracked_changes": false,
+    "uncommitted_files": [
+      "cfa_seesr/__pycache__/",
+      "experiments/configs/colab_lornet_pilot.yaml",
+      "experiments/training/configs/colab_lornet_drive.yaml",
+      "preset/models"
+    ]
+  },
+  "environment": {
+    "python": "3.10.22",
+    "platform": "Linux-6.6.159+-x86_64-with-glibc2.39",
+    "packages": {
+      "torch": "2.14.1",
+      "diffusers": "0.21.0",
+      "transformers": "4.25.0",
+      "accelerate": "1.15.0",
+      "xformers": "0.0.22",
+      "pyiqa": null,
+      "numpy": "2.2.6",
+      "Pillow": "12.3.0"
+    },
+    "cuda_available": true,
+    "torch_cuda_build": "13.0",
+    "cudnn": 92400,
+    "gpu_name": "Tesla T4",
+    "gpu_total_vram_mb": 14913,
+    "gpu_capability": "7.5",
+    "gpu_free_vram_mb_at_start": 14684
+  },
+  "attention_backend": "pytorch_sdpa_default",
+  "method": {
+    "semantic_confidence": {
+      "enabled": false,
+      "temperature": 1.0,
+      "min_confidence": 0.5,
+      "soft_scale_min": 1.0,
+      "soft_scale_max": 1.0,
+      "aggregate": "mean"
+    },
+    "lr_guidance": {
+      "enabled": false,
+      "schedule": "constant",
+      "scale_start": 1.0,
+      "scale_end": 1.0,
+      "gamma": 1.0
+    },
+    "spatial_semantic": {
+      "enabled": false,
+      "contrast": 0.0,
+      "smoothing_sigma": 1.0,
+      "attention_layer": -1,
+      "soft_scale_min": 0.5,
+      "soft_scale_max": 1.0,
+      "temperature": 1.0,
+      "control": "none",
+      "shuffle_seed": 0,
+      "eps": 1e-08
+    },
+    "sfr_oc": {
+      "enabled": true,
+      "strength": 1.0,
+      "band": "low",
+      "lowpass": "gaussian",
+      "sigma": 3.0,
+      "cutoff": 0.25,
+      "schedule": "power",
+      "power": 1.0,
+      "t_min": 0,
+      "t_max": 1000,
+      "reference": "auto",
+      "precision": "output",
+      "profile": false,
+      "save_maps": true,
+      "reliability": "learned",
+      "observation": {
+        "analysis_scale": 4,
+        "window": 7,
+        "weights": {
+          "edge_coherence": 1.0,
+          "frequency_energy": 1.0,
+          "contrast": 1.0,
+          "noise": 1.0,
+          "sharpness": 1.0
+        },
+        "reference_level": 0.02,
+        "significance": 2.0,
+        "smoothing_sigma": 1.0,
+        "low_gradient_quantile": 0.5,
+        "noise_floor": 0.00392156862745098,
+        "presmooth_sigma": 1.0
+      },
+      "learned": {
+        "checkpoint": "<DRIVE_ROOT>/lornet_training/runs/lornet_v1/checkpoints/best.pt",
+        "blend": 0.5
+      },
+      "fusion": {
+        "map": "fused",
+        "w_observation": 0.5,
+        "w_semantic": 0.5,
+        "bias": 0.0,
+        "w_min": 0.0,
+        "w_max": 1.0,
+        "semantic_default": 0.5,
+        "control": "none",
+        "shuffle_block": 8,
+        "shuffle_seed": 0
+      }
+    },
+    "version": "2.1.0",
+    "signature": "cfa-seesr-v2",
+    "is_baseline": false,
+    "semantic_active": false,
+    "lr_active": false,
+    "spatial_active": false,
+    "sfroc_active": true,
+    "sfroc_summary": {
+      "n_calls": 1,
+      "settings": {
+        "strength": 1.0,
+        "band": "low",
+        "lowpass": "gaussian",
+        "sigma": 3.0,
+        "cutoff": null,
+        "schedule": "power",
+        "power": 1.0,
+        "t_min": 0,
+        "t_max": 1000,
+        "precision": "output",
+        "formulation": "Delta = gamma(t) * LPF_h(W * LPF_h(z_lr - x0)); x_{t-1}' = step(x0) + c0(t) * Delta",
+        "prediction_type": "epsilon",
+        "map_mode": "fused",
+        "control": "none",
+        "reliability": "learned",
+        "lornet_checkpoint": "<DRIVE_ROOT>/lornet_training/runs/lornet_v1/checkpoints/best.pt",
+        "lornet_sha256": "bdeb3a0f7aa9d1443e0f6c12715e971eb55c3c7412513e58a1a6d08047734b41",
+        "lornet_tau": 0.3263322644979552
+      },
+      "reference_sources": [
+        "pipeline_encode"
+      ],
+      "semantic_sources": [
+        "default"
+      ],
+      "mean_steps_corrected": 30.0,
+      "mean_gamma": 0.47997997997997993,
+      "mean_W": 0.5304445624351501,
+      "mean_O": 0.5608891248703003,
+      "mean_S": 0.5,
+      "mean_analysis_ms": 1958.8126220703125,
+      "mean_correction_ms": 13.34844796359539,
+      "mean_encode_ms": 0.0,
+      "timing_methods": [
+        "cuda_events"
+      ],
+      "timing_note": "SFR-OC sections only (map analysis, reference encode, correction kernels). On CUDA: CUDA events, GPU time from the first to the last kernel of each section, excluding UNet/ControlNet work queued before it; read once after the pipeline call. On CPU: perf_counter. sfr_oc.profile=true adds explicit synchronisation."
+    }
+  },
+  "seeding": "upstream: one generator seeded once with 42; per-image noise depends on image order and on the number of steps of earlier images",
+  "config": {
+    "preset": "preset/models",
+    "experiment": {
+      "name": "realsr_lornet_learned_pilot"
+    },
+    "models": {
+      "seesr_model_path": "preset/models/seesr",
+      "pretrained_model_path": "preset/models/stable-diffusion-2-base",
+      "ram_path": "preset/models/ram_swin_large_14m.pth",
+      "ram_pretrained_path": "preset/models/ram_swin_large_14m.pth",
+      "ram_ft_path": "preset/models/ram_swin_large_14m.pth",
+      "dape_path": "preset/models/DAPE.pth",
+      "scaler_path": "preset/models/scaler.pt"
+    },
+    "dataset": {
+      "name": "pilot_realsr",
+      "lr_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_lr",
+      "gt_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_gt",
+      "strip_suffixes": []
+    },
+    "inference": {
+      "num_inference_steps": 30,
+      "guidance_scale": 5.5,
+      "seed": 42
+    },
+    "method": {
+      "sfr_oc": {
+        "enabled": true,
+        "strength": 1.0,
+        "band": "low",
+        "reliability": "learned",
+        "learned": {
+          "checkpoint": "<DRIVE_ROOT>/lornet_training/runs/lornet_v1/checkpoints/best.pt",
+          "blend": 0.5
+        }
+      }
+    },
+    "output": {
+      "results_root": "<DRIVE_ROOT>/results/realsr_lornet_learned_pilot"
+    },
+    "runtime": {
+      "enable_xformers": false
+    }
+  },
+  "upstream_args": {
+    "seesr_model_path": "<REPO>/preset/models/seesr",
+    "ram_ft_path": "<REPO>/preset/models/ram_swin_large_14m.pth",
+    "pretrained_model_path": "<REPO>/preset/models/stable-diffusion-2-base",
+    "prompt": "",
+    "added_prompt": "clean, high-resolution, 8k",
+    "negative_prompt": "dotted, noise, blur, lowres, smooth",
+    "image_path": "<DRIVE_ROOT>/datasets/pilot_realsr_lr",
+    "output_dir": "<DRIVE_ROOT>/results/realsr_lornet_learned_pilot/realsr_lornet_learned_pilot/sr",
+    "mixed_precision": "fp16",
+    "guidance_scale": 5.5,
+    "conditioning_scale": 1.0,
+    "blending_alpha": 1.0,
+    "num_inference_steps": 30,
+    "process_size": 512,
+    "vae_decoder_tiled_size": 224,
+    "vae_encoder_tiled_size": 1024,
+    "latent_tiled_size": 96,
+    "latent_tiled_overlap": 4,
+    "upscale": 4,
+    "seed": 42,
+    "sample_times": 1,
+    "align_method": "adain",
+    "start_steps": 999,
+    "start_point": "lr",
+    "save_prompts": false
+  },
+  "checkpoints": {
+    "seesr_model_path": {
+      "path": "<REPO>/preset/models/seesr",
+      "exists": true,
+      "n_files": 5,
+      "size_bytes": 6463376740,
+      "fingerprint": "464a022c757a9b45e2832d8641ee54dd3ad8c60d16219d90188babf866a1bb6e"
+    },
+    "pretrained_model_path": {
+      "path": "<REPO>/preset/models/stable-diffusion-2-base",
+      "exists": true,
+      "n_files": 51,
+      "size_bytes": 7742340926,
+      "fingerprint": "1a1e1b58ef7d58d5767c49b38198f25002506a0aa7916f22f9649ad8ef49f725"
+    },
+    "ram_path": {
+      "path": "<REPO>/preset/models/ram_swin_large_14m.pth",
+      "exists": true,
+      "size_bytes": 5625634877,
+      "fingerprint": "ed9cf4d48215b97132c287661439fa34f41fecea3bd6f1209864f9394aae4d9d"
+    },
+    "ram_pretrained_path": {
+      "path": "<REPO>/preset/models/ram_swin_large_14m.pth",
+      "exists": true,
+      "size_bytes": 5625634877,
+      "fingerprint": "ed9cf4d48215b97132c287661439fa34f41fecea3bd6f1209864f9394aae4d9d"
+    },
+    "ram_ft_path": {
+      "path": "<REPO>/preset/models/ram_swin_large_14m.pth",
+      "exists": true,
+      "size_bytes": 5625634877,
+      "fingerprint": "ed9cf4d48215b97132c287661439fa34f41fecea3bd6f1209864f9394aae4d9d"
+    },
+    "dape_path": {
+      "path": "<REPO>/preset/models/DAPE.pth",
+      "exists": true,
+      "size_bytes": 7194489,
+      "fingerprint": "fe1dab1205bced85d390bd49ff00e5f983f5e52a5ababd9f851ce89924e26e4a"
+    },
+    "scaler_path": {
+      "path": "<REPO>/preset/models/scaler.pt",
+      "exists": false
+    }
+  },
+  "dataset": {
+    "name": "pilot_realsr",
+    "lr_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_lr",
+    "gt_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_gt",
+    "strip_suffixes": [],
+    "n_images": 1,
+    "filenames_sha256": "5a20803678c791d58c2b525f11eb217f3568e170fb67750273dad274233835d0",
+    "lr_dir_fingerprint": "aecdd6dd33825d3692b4700bb42c39ad715bc470d37d66e68b1f068a1f775e08"
+  },
+  "determinism": "Seeded torch generator, but not bitwise deterministic: cuDNN/xformers kernels and fp16 autocast are not forced into deterministic mode.",
+  "missing_outputs": [],
+  "finished_at": "2026-11-20T00:01:14+00:00",
+  "timing": {
+    "wall_clock_s": 256.7591,
+    "pipeline_load_s": 64.1352,
+    "tag_model_load_s": 174.9448,
+    "images_timed": 1,
+    "per_image_total_s_mean": 17.3307,
+    "per_image_total_s_median": 17.3307,
+    "per_image_total_s_mean_excl_first": null,
+    "sum_per_image_total_s": 17.3307,
+    "per_image_diffusion_s_mean_excl_first": null,
+    "sum_diffusion_s": 15.5373,
+    "warmup_image_excluded": null,
+    "peak_vram_allocated_mb_max": 6864,
+    "peak_vram_reserved_mb_max": 6926,
+    "note": "Timed with torch.cuda.synchronize() before and after each section. prompt_s = DAPE tagging + soft-prompt embedding; diffusion_s = pipeline call (VAE encode, all denoising steps, VAE decode). Model loading, image I/O, colour correction, saving and all metric computation are excluded. The first image includes CUDA warm-up; *_excl_first values drop it."
+  },
+  "scheduler": {
+    "class": "DDPMScheduler",
+    "config": {
+      "num_train_timesteps": 1000,
+      "beta_start": 0.00085,
+      "beta_end": 0.012,
+      "beta_schedule": "scaled_linear",
+      "trained_betas": null,
+      "variance_type": "fixed_small",
+      "clip_sample": false,
+      "prediction_type": "epsilon",
+      "thresholding": false,
+      "dynamic_thresholding_ratio": 0.995,
+      "clip_sample_range": 1.0,
+      "sample_max_value": 1.0,
+      "timestep_spacing": "leading",
+      "steps_offset": 1,
+      "_use_default_values": [
+        "clip_sample_range",
+        "prediction_type",
+        "timestep_spacing",
+        "sample_max_value",
+        "variance_type",
+        "dynamic_thresholding_ratio",
+        "thresholding"
+      ],
+      "_class_name": "DDIMScheduler",
+      "_diffusers_version": "0.8.0",
+      "set_alpha_to_one": false,
+      "skip_prk_steps": true
+    },
+    "scheduled_timesteps": [
+      958,
+      925,
+      892,
+      859,
+      826,
+      793,
+      760,
+      727,
+      694,
+      661,
+      628,
+      595,
+      562,
+      529,
+      496,
+      463,
+      430,
+      397,
+      364,
+      331,
+      298,
+      265,
+      232,
+      199,
+      166,
+      133,
+      100,
+      67,
+      34,
+      1
+    ],
+    "denoising_steps_per_call": [
+      30
+    ]
+  },
+  "runtime_verified": {
+    "unet_dtype": "torch.float16",
+    "unet_class": "models.unet_2d_condition.UNet2DConditionModel",
+    "controlnet_dtype": "torch.float16",
+    "controlnet_class": "models.controlnet.ControlNetModel",
+    "vae_dtype": "torch.float16",
+    "vae_class": "diffusers.models.autoencoder_kl.AutoencoderKL",
+    "text_encoder_dtype": "torch.float16",
+    "text_encoder_class": "transformers.models.clip.modeling_clip.CLIPTextModel",
+    "unet_attention_processors": [
+      "AttnProcessor2_0"
+    ],
+    "controlnet_attention_processors": [
+      "AttnProcessor2_0"
+    ],
+    "unet_use_image_cross_attention": true
+  },
+  "outputs": {
+    "sr_dir": "<DRIVE_ROOT>/results/realsr_lornet_learned_pilot/realsr_lornet_learned_pilot/sr/sample00",
+    "per_image_csv": "<DRIVE_ROOT>/results/realsr_lornet_learned_pilot/realsr_lornet_learned_pilot/per_image.csv"
+  }
+}

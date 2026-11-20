@@ -21,7 +21,7 @@ flowchart LR
   PREP -->|"item 0 (CFG copies checked)"| LOR["LORNet O<br/>checkpoint, no grad"]:::trained
   HEUR --> SEL{"reliability<br/>heuristic / learned / blend"}:::v2
   LOR --> SEL
-  PREP --> VAEE["VAE encode for the LR start (frozen)<br/>posterior captured by V2"]:::frozen
+  PREP --> VAEE["VAE encode of conditioning item 0 (frozen)<br/>reference encode, once per image"]:::frozen
   SSR -->|"S at latent res"| FUSE["V2: fusion W<br/>fused / observation / uniform<br/>mean_matched / shuffled"]:::v2
   A -->|"C when SSR off"| FUSE
   SEL -->|"O at latent res"| FUSE

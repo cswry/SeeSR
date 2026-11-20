@@ -1,4 +1,5 @@
 # CFA-SeeSR V2: hybrid ablation (frequency-selective observation consistency, heuristic and learned reliability).
+# Status (method 2.1.1): PLANNED, not yet run. No reported result comes from this sweep (docs/results.md).
 #   variants  x  DDPM steps {50, 30, 20}  x  seeds {42, 123, 2026}
 #
 # Same protocol as sampling_sweep.yaml (track B): per-image seeding, identical images, checkpoints, CFG,

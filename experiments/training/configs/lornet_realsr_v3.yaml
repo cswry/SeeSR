@@ -1,0 +1,60 @@
+# LORNet training, RealSR V3 only: the configuration of the V2.1 pilot checkpoint (lornet_v1).
+# Identical to lornet.yaml except that the DRealSR source is absent (it was not available in that run).
+# Recorded outcome: assets/training/lornet_v1_summary.json (400 pairs: 368 train / 32 val images, 1,088 / 101
+# crops, tau = 0.32633, best epoch 3 of 12, validation loss 0.111512).
+# Set exclude_dirs to the evaluation LR folders before training a checkpoint you will evaluate.
+#
+# Based on: LORNet training (CFA-SeeSR V2). Only LORNet is trained; the SeeSR VAE is frozen and used once, to build the
+# latent cache. UNet, ControlNet and DAPE are not loaded at all.
+#
+#   python experiments/training/train_lornet.py cache    --config experiments/training/configs/lornet_realsr_v3.yaml
+#   python experiments/training/train_lornet.py train    --config experiments/training/configs/lornet_realsr_v3.yaml
+#   python experiments/training/train_lornet.py evaluate --config experiments/training/configs/lornet_realsr_v3.yaml
+#
+# Paths below are placeholders: set them with --set data.sources.0.hr_dir=... or edit a copy of this file.
+
+seed: 2026
+output_dir: experiments/training/runs/lornet_v1       # cache/, checkpoints/, logs
+
+vae:
+  pretrained_model_path: preset/models/stable-diffusion-2-base   # the SeeSR VAE (subfolder vae), frozen
+  dtype: float16                # float16 on CUDA (T4); float32 is used automatically on CPU
+
+data:
+  # TRAINING splits only. `group` names the dataset a source belongs to (screening-set folders). RealSR V3: HR and LR4 images in one folder per camera; DRealSR x4: train_HR / train_LR.
+  sources:
+    - {name: realsr_canon, group: RealSR, hr_dir: datasets/RealSR_V3/Canon/Train/4, lr_dir: datasets/RealSR_V3/Canon/Train/4,
+       hr_pattern: "*_HR.png", lr_pattern: "*_LR4.png"}
+    - {name: realsr_nikon, group: RealSR, hr_dir: datasets/RealSR_V3/Nikon/Train/4, lr_dir: datasets/RealSR_V3/Nikon/Train/4,
+       hr_pattern: "*_HR.png", lr_pattern: "*_LR4.png"}
+  # every image stem found here is excluded; overlap with training stems is an error (evaluation sets)
+  exclude_dirs: []
+  val_fraction: 0.1             # hash-selected images (all crops of an image on one side)
+  scale: 4
+  crop_hr: 512                  # HR crop; LR crop 128 -> conditioning image 512 -> latent 64 x 64
+  crops_per_image: 4
+  process_size: 512             # as test_seesr.py (small LR images are enlarged first)
+
+target:
+  lowpass: {method: gaussian, sigma: 3.0, cutoff: 0.25}   # the SFR-OC low-pass (latent px)
+  window: 3                     # LocalAverage window (latent px)
+  # tau is estimated from the TRAINING cache (median E / ln 2) and stored in the manifest and checkpoints
+
+model:
+  features: [y, grad, contrast, hf]     # compact set; ablate with --set model.features=[y]
+  widths: [16, 24, 32, 48]
+  uncertainty: false
+
+train:
+  loss: charbonnier             # charbonnier (robust regression) | bce (soft labels) | gaussian_nll (needs uncertainty)
+  tv_weight: 0.05               # lambda_TV
+  batch_size: 16
+  num_workers: 2
+  epochs: 60
+  lr: 0.002
+  weight_decay: 0.0001
+  amp: true                     # CUDA autocast fp16 (ignored on CPU)
+  early_stopping_patience: 8    # epochs without validation improvement
+  selection_metric: val_loss    # lower is better; best.pt is the epoch with the lowest value
+  augment: true                 # flips / transpose, identical for image and map
+  deterministic: true           # torch deterministic algorithms where available (may be slower)

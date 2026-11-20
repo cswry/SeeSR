@@ -1,0 +1,440 @@
+{
+  "experiment": {
+    "name": "realsr_single_image_pilot",
+    "description": "Original SeeSR, DDPM, 50 steps, upstream defaults."
+  },
+  "status": "completed",
+  "started_at": "2026-11-19T20:23:07+00:00",
+  "git": {
+    "commit": "77e664ffb163a590d8d9694cbaf4524cf85bbea4",
+    "branch": "research/cfa-seesr-v2",
+    "tracked_changes": false,
+    "uncommitted_files": [
+      "experiments/configs/colab_realsr_pilot.yaml",
+      "preset/models"
+    ]
+  },
+  "environment": {
+    "python": "3.10.22",
+    "platform": "Linux-6.6.159+-x86_64-with-glibc2.39",
+    "packages": {
+      "torch": "2.0.1+cu118",
+      "diffusers": "0.21.0",
+      "transformers": "4.25.0",
+      "accelerate": "0.25.0",
+      "xformers": "0.0.20",
+      "pyiqa": "0.1.10",
+      "numpy": "1.26.4",
+      "Pillow": "12.3.0"
+    },
+    "cuda_available": true,
+    "torch_cuda_build": "11.8",
+    "cudnn": 8700,
+    "gpu_name": "Tesla T4",
+    "gpu_total_vram_mb": 14913,
+    "gpu_capability": "7.5",
+    "gpu_free_vram_mb_at_start": 14808
+  },
+  "attention_backend": "xformers",
+  "method": {
+    "semantic_confidence": {
+      "enabled": false,
+      "temperature": 1.0,
+      "min_confidence": 0.5,
+      "soft_scale_min": 1.0,
+      "soft_scale_max": 1.0,
+      "aggregate": "mean"
+    },
+    "lr_guidance": {
+      "enabled": false,
+      "schedule": "constant",
+      "scale_start": 1.0,
+      "scale_end": 1.0,
+      "gamma": 1.0
+    },
+    "spatial_semantic": {
+      "enabled": false,
+      "contrast": 0.0,
+      "smoothing_sigma": 1.0,
+      "attention_layer": -1,
+      "soft_scale_min": 0.5,
+      "soft_scale_max": 1.0,
+      "temperature": 1.0,
+      "control": "none",
+      "shuffle_seed": 0,
+      "eps": 1e-08
+    },
+    "sfr_oc": {
+      "enabled": false,
+      "strength": 0.0,
+      "band": "low",
+      "lowpass": "gaussian",
+      "sigma": 3.0,
+      "cutoff": 0.25,
+      "schedule": "power",
+      "power": 1.0,
+      "t_min": 0,
+      "t_max": 1000,
+      "reference": "auto",
+      "precision": "output",
+      "profile": false,
+      "save_maps": true,
+      "reliability": "heuristic",
+      "observation": {
+        "analysis_scale": 4,
+        "window": 7,
+        "weights": {
+          "edge_coherence": 1.0,
+          "frequency_energy": 1.0,
+          "contrast": 1.0,
+          "noise": 1.0,
+          "sharpness": 1.0
+        },
+        "reference_level": 0.02,
+        "significance": 2.0,
+        "smoothing_sigma": 1.0,
+        "low_gradient_quantile": 0.5,
+        "noise_floor": 0.00392156862745098,
+        "presmooth_sigma": 1.0
+      },
+      "learned": {
+        "checkpoint": null,
+        "blend": 0.5
+      },
+      "fusion": {
+        "map": "fused",
+        "w_observation": 0.5,
+        "w_semantic": 0.5,
+        "bias": 0.0,
+        "w_min": 0.0,
+        "w_max": 1.0,
+        "semantic_default": 0.5,
+        "control": "none",
+        "shuffle_block": 8,
+        "shuffle_seed": 0
+      }
+    },
+    "version": "2.1.0",
+    "signature": "upstream",
+    "is_baseline": true,
+    "semantic_active": false,
+    "lr_active": false,
+    "spatial_active": false,
+    "sfroc_active": false
+  },
+  "seeding": "upstream: one generator seeded once with 42; per-image noise depends on image order and on the number of steps of earlier images",
+  "config": {
+    "experiment": {
+      "name": "realsr_single_image_pilot",
+      "description": "Original SeeSR, DDPM, 50 steps, upstream defaults."
+    },
+    "models": {
+      "pretrained_model_path": "preset/models/stable-diffusion-2-base",
+      "seesr_model_path": "preset/models/seesr",
+      "ram_ft_path": "preset/models/DAPE.pth",
+      "ram_pretrained_path": "preset/models/ram_swin_large_14m.pth"
+    },
+    "dataset": {
+      "name": "RealSR",
+      "split": "test",
+      "lr_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_lr",
+      "gt_dir": "<DRIVE_ROOT>/datasets/StableSR_testsets/RealSRVal_crop128/test_HR",
+      "strip_suffixes": []
+    },
+    "inference": {
+      "prompt": "",
+      "added_prompt": "clean, high-resolution, 8k",
+      "negative_prompt": "dotted, noise, blur, lowres, smooth",
+      "mixed_precision": "fp16",
+      "guidance_scale": 5.5,
+      "conditioning_scale": 1.0,
+      "blending_alpha": 1.0,
+      "num_inference_steps": 30,
+      "process_size": 512,
+      "vae_decoder_tiled_size": 224,
+      "vae_encoder_tiled_size": 1024,
+      "latent_tiled_size": 96,
+      "latent_tiled_overlap": 4,
+      "upscale": 4,
+      "seed": 42,
+      "sample_times": 1,
+      "align_method": "adain",
+      "start_steps": 999,
+      "start_point": "lr",
+      "save_prompts": true
+    },
+    "runtime": {
+      "scheduler": "DDPMScheduler",
+      "sampler_override": null,
+      "enable_xformers": "auto",
+      "reseed_per_image": false
+    },
+    "method": {
+      "semantic_confidence": {
+        "enabled": false,
+        "temperature": 1.0,
+        "min_confidence": 0.5,
+        "soft_scale_min": 1.0,
+        "soft_scale_max": 1.0,
+        "aggregate": "mean"
+      },
+      "lr_guidance": {
+        "enabled": false,
+        "schedule": "constant",
+        "scale_start": 1.0,
+        "scale_end": 1.0,
+        "gamma": 1.0
+      },
+      "spatial_semantic": {
+        "enabled": false,
+        "contrast": 0.0,
+        "smoothing_sigma": 1.0,
+        "attention_layer": -1,
+        "soft_scale_min": 0.5,
+        "soft_scale_max": 1.0,
+        "temperature": 1.0,
+        "control": "none",
+        "shuffle_seed": 0
+      },
+      "sfr_oc": {
+        "enabled": false,
+        "strength": 0.0,
+        "band": "low",
+        "lowpass": "gaussian",
+        "sigma": 3.0,
+        "cutoff": 0.25,
+        "schedule": "power",
+        "power": 1.0,
+        "t_min": 0,
+        "t_max": 1000,
+        "reference": "auto",
+        "precision": "output",
+        "profile": false,
+        "save_maps": true,
+        "reliability": "heuristic",
+        "learned": {
+          "checkpoint": null,
+          "blend": 0.5
+        },
+        "observation": {
+          "analysis_scale": 4,
+          "window": 7,
+          "weights": {
+            "edge_coherence": 1.0,
+            "frequency_energy": 1.0,
+            "contrast": 1.0,
+            "noise": 1.0,
+            "sharpness": 1.0
+          },
+          "reference_level": 0.02,
+          "significance": 2.0,
+          "smoothing_sigma": 1.0,
+          "low_gradient_quantile": 0.5,
+          "noise_floor": 0.00392156862745098,
+          "presmooth_sigma": 1.0
+        },
+        "fusion": {
+          "map": "fused",
+          "w_observation": 0.5,
+          "w_semantic": 0.5,
+          "bias": 0.0,
+          "w_min": 0.0,
+          "w_max": 1.0,
+          "semantic_default": 0.5,
+          "control": "none",
+          "shuffle_block": 8,
+          "shuffle_seed": 0
+        }
+      }
+    },
+    "output": {
+      "results_root": "<DRIVE_ROOT>/results"
+    },
+    "evaluation": {
+      "paired_metrics": [
+        "psnr",
+        "ssim",
+        "lpips",
+        "dists"
+      ],
+      "noref_metrics": [
+        "musiq",
+        "clipiqa"
+      ],
+      "y_channel": true,
+      "crop_border": 0
+    }
+  },
+  "upstream_args": {
+    "seesr_model_path": "<REPO>/preset/models/seesr",
+    "ram_ft_path": "<REPO>/preset/models/DAPE.pth",
+    "pretrained_model_path": "<REPO>/preset/models/stable-diffusion-2-base",
+    "prompt": "",
+    "added_prompt": "clean, high-resolution, 8k",
+    "negative_prompt": "dotted, noise, blur, lowres, smooth",
+    "image_path": "<DRIVE_ROOT>/datasets/pilot_realsr_lr",
+    "output_dir": "<DRIVE_ROOT>/results/realsr_single_image_pilot/sr",
+    "mixed_precision": "fp16",
+    "guidance_scale": 5.5,
+    "conditioning_scale": 1.0,
+    "blending_alpha": 1.0,
+    "num_inference_steps": 30,
+    "process_size": 512,
+    "vae_decoder_tiled_size": 224,
+    "vae_encoder_tiled_size": 1024,
+    "latent_tiled_size": 96,
+    "latent_tiled_overlap": 4,
+    "upscale": 4,
+    "seed": 42,
+    "sample_times": 1,
+    "align_method": "adain",
+    "start_steps": 999,
+    "start_point": "lr",
+    "save_prompts": true
+  },
+  "checkpoints": {
+    "pretrained_model_path": {
+      "path": "<REPO>/preset/models/stable-diffusion-2-base",
+      "exists": true,
+      "n_files": 51,
+      "size_bytes": 7742340926,
+      "fingerprint": "1a1e1b58ef7d58d5767c49b38198f25002506a0aa7916f22f9649ad8ef49f725"
+    },
+    "seesr_model_path": {
+      "path": "<REPO>/preset/models/seesr",
+      "exists": true,
+      "n_files": 5,
+      "size_bytes": 6463376740,
+      "fingerprint": "464a022c757a9b45e2832d8641ee54dd3ad8c60d16219d90188babf866a1bb6e"
+    },
+    "ram_ft_path": {
+      "path": "<REPO>/preset/models/DAPE.pth",
+      "exists": true,
+      "size_bytes": 7194489,
+      "fingerprint": "fe1dab1205bced85d390bd49ff00e5f983f5e52a5ababd9f851ce89924e26e4a"
+    },
+    "ram_pretrained_path": {
+      "path": "<REPO>/preset/models/ram_swin_large_14m.pth",
+      "exists": true,
+      "size_bytes": 5625634877,
+      "fingerprint": "ed9cf4d48215b97132c287661439fa34f41fecea3bd6f1209864f9394aae4d9d"
+    }
+  },
+  "dataset": {
+    "name": "RealSR",
+    "split": "test",
+    "lr_dir": "<DRIVE_ROOT>/datasets/pilot_realsr_lr",
+    "gt_dir": "<DRIVE_ROOT>/datasets/StableSR_testsets/RealSRVal_crop128/test_HR",
+    "strip_suffixes": [],
+    "n_images": 1,
+    "filenames_sha256": "5a20803678c791d58c2b525f11eb217f3568e170fb67750273dad274233835d0",
+    "lr_dir_fingerprint": "aecdd6dd33825d3692b4700bb42c39ad715bc470d37d66e68b1f068a1f775e08"
+  },
+  "determinism": "Seeded torch generator, but not bitwise deterministic: cuDNN/xformers kernels and fp16 autocast are not forced into deterministic mode.",
+  "missing_outputs": [],
+  "finished_at": "2026-11-19T20:32:38+00:00",
+  "timing": {
+    "wall_clock_s": 536.6141,
+    "pipeline_load_s": 285.6897,
+    "tag_model_load_s": 228.1704,
+    "images_timed": 1,
+    "per_image_total_s_mean": 22.3807,
+    "per_image_total_s_median": 22.3807,
+    "per_image_total_s_mean_excl_first": null,
+    "sum_per_image_total_s": 22.3807,
+    "per_image_diffusion_s_mean_excl_first": null,
+    "sum_diffusion_s": 20.7563,
+    "warmup_image_excluded": null,
+    "peak_vram_allocated_mb_max": 6863,
+    "peak_vram_reserved_mb_max": 6926,
+    "note": "Timed with torch.cuda.synchronize() before and after each section. prompt_s = DAPE tagging + soft-prompt embedding; diffusion_s = pipeline call (VAE encode, all denoising steps, VAE decode). Model loading, image I/O, colour correction, saving and all metric computation are excluded. The first image includes CUDA warm-up; *_excl_first values drop it."
+  },
+  "scheduler": {
+    "class": "DDPMScheduler",
+    "config": {
+      "num_train_timesteps": 1000,
+      "beta_start": 0.00085,
+      "beta_end": 0.012,
+      "beta_schedule": "scaled_linear",
+      "trained_betas": null,
+      "variance_type": "fixed_small",
+      "clip_sample": false,
+      "prediction_type": "epsilon",
+      "thresholding": false,
+      "dynamic_thresholding_ratio": 0.995,
+      "clip_sample_range": 1.0,
+      "sample_max_value": 1.0,
+      "timestep_spacing": "leading",
+      "steps_offset": 1,
+      "_use_default_values": [
+        "variance_type",
+        "prediction_type",
+        "sample_max_value",
+        "timestep_spacing",
+        "thresholding",
+        "clip_sample_range",
+        "dynamic_thresholding_ratio"
+      ],
+      "_class_name": "DDIMScheduler",
+      "_diffusers_version": "0.8.0",
+      "set_alpha_to_one": false,
+      "skip_prk_steps": true
+    },
+    "scheduled_timesteps": [
+      958,
+      925,
+      892,
+      859,
+      826,
+      793,
+      760,
+      727,
+      694,
+      661,
+      628,
+      595,
+      562,
+      529,
+      496,
+      463,
+      430,
+      397,
+      364,
+      331,
+      298,
+      265,
+      232,
+      199,
+      166,
+      133,
+      100,
+      67,
+      34,
+      1
+    ],
+    "denoising_steps_per_call": [
+      30
+    ]
+  },
+  "runtime_verified": {
+    "unet_dtype": "torch.float16",
+    "unet_class": "models.unet_2d_condition.UNet2DConditionModel",
+    "controlnet_dtype": "torch.float16",
+    "controlnet_class": "models.controlnet.ControlNetModel",
+    "vae_dtype": "torch.float16",
+    "vae_class": "diffusers.models.autoencoder_kl.AutoencoderKL",
+    "text_encoder_dtype": "torch.float16",
+    "text_encoder_class": "transformers.models.clip.modeling_clip.CLIPTextModel",
+    "unet_attention_processors": [
+      "XFormersAttnProcessor"
+    ],
+    "controlnet_attention_processors": [
+      "XFormersAttnProcessor"
+    ],
+    "unet_use_image_cross_attention": true
+  },
+  "outputs": {
+    "sr_dir": "<DRIVE_ROOT>/results/realsr_single_image_pilot/sr/sample00",
+    "per_image_csv": "<DRIVE_ROOT>/results/realsr_single_image_pilot/per_image.csv"
+  }
+}

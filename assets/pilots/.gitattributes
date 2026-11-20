@@ -1,0 +1,3 @@
+# Saved run artifacts: keep byte-for-byte (the CSVs use CRLF as written by Python's csv module)
+*.csv -text -whitespace
+*.json -whitespace

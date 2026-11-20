@@ -117,7 +117,8 @@ method:
     power: 1.0
     t_min: 0                  # no correction below this timestep
     t_max: 1000
-    reference: auto           # auto: reuse the pipeline's own LR encode (start_point lr) | extra_encode
+    reference: extra_encode   # extra_encode: one VAE encode of the conditioning image (default) | pipeline:
+                              # reuse the pipeline's own LR-start posterior (needs start_point lr)
     precision: output         # output: step(model_output) + c0(t)*Delta (dtype and RNG as V1) | output_carry:
                               # + fp32 error feedback of the fp16 rounding | model_output: legacy eps' rewrite
     profile: false            # explicit synchronisation around the timed sections (benchmarks only)

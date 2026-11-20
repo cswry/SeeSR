@@ -3,12 +3,17 @@
 Parts B (frequency-selective observation consistency) and C (reliability fusion); part A is
 observation_reliability.py. Applied around the scheduler step: NO UNet or ControlNet evaluation is added.
 
-Reference latent. z_lr = mean of the VAE posterior of the upscaled LR image, times vae.config.scaling_factor:
-the VAE and scaling convention of the pipeline's LR-embedded start
-(`vae.encode(image*2-1).latent_dist.sample() * scaling_factor`, pipeline_seesr.py:989-990). With start_point='lr'
-the pipeline's own encode is captured (no extra VAE pass); the posterior MEAN replaces the pipeline's sample so the
-reference is deterministic and no RNG draw is added. With start_point='noise' the module encodes once per pipeline
-call (reference_source='extra_encode').
+Reference latent. z_lr = mean of the VAE posterior of the conditioning image (the upscaled LR, batch item 0)
+times vae.config.scaling_factor: the VAE and scaling convention of the pipeline's LR-embedded start
+(`vae.encode(image*2-1).latent_dist.sample() * scaling_factor`, pipeline_seesr.py:989-990), but the MEAN, so the
+reference is deterministic and no RNG draw is added.
+  reference='extra_encode' (default since 2.1.1): one extra VAE encoder pass of item 0 per pipeline call (the CFG
+    copies of the conditioning image are checked identical when the maps are built). The V2.1 heuristic pilot ran
+    this: with V1 enabled on the pinned torch 2.0.1 stack, the pipeline's own posterior failed the deferred
+    CFG-identical check twice (its two rows were not bit-identical; cause not isolated). The learned pilot, run
+    earlier without V1 in a different environment, used the pipeline posterior and passed the check.
+  reference='pipeline' (opt-in): reuse the posterior of the pipeline's own LR encode (start_point 'lr'; no extra
+    pass), with the deferred check that its CFG rows are identical.
 
 Correction at a reverse step scheduler.step(model_output, t, x_t, ...), a = alphas_cumprod[t]:
 
@@ -80,6 +85,7 @@ MAP_MODES = ("fused", "mean_matched", "uniform", "observation", "semantic")
 CONTROLS = ("none", "shuffled")
 PRECISIONS = ("output", "output_carry", "model_output")
 RELIABILITY_SOURCES = ("heuristic", "learned", "blend")
+REFERENCES = ("extra_encode", "pipeline")
 SUPPORTED_SCHEDULERS = ("DDPMScheduler", "DDIMScheduler")
 SUPPORTED_PREDICTION_TYPES = ("epsilon", "v_prediction", "sample")
 FORMULATION = "Delta = gamma(t) * LPF_h(W * LPF_h(z_lr - x0)); x_{t-1}' = step(x0) + c0(t) * Delta"
@@ -137,7 +143,8 @@ class SFROCConfig:
     power: float = 1.0                  # f = (t/T)^power
     t_min: int = 0                      # no correction for t < t_min
     t_max: int = 1000                   # no correction for t > t_max
-    reference: str = "auto"             # auto: pipeline's LR encode if available, else one extra encode
+    reference: str = "extra_encode"     # extra_encode: one VAE encode of conditioning item 0 (default, 2.1.1)
+                                        # pipeline: reuse the pipeline's LR-start posterior (opt-in)
     precision: str = "output"           # output: add c0*Delta to the step output | output_carry: + fp32 error
                                         # feedback of the rounding remainder | model_output: legacy eps' path
     profile: bool = False               # explicit synchronisation around timed blocks (benchmarks only)
@@ -167,8 +174,11 @@ class SFROCConfig:
             raise ValueError("sfr_oc.power must be > 0")
         if not 0 <= self.t_min <= self.t_max:
             raise ValueError("sfr_oc: need 0 <= t_min <= t_max")
-        if self.reference not in ("auto", "extra_encode"):
-            raise ValueError("sfr_oc.reference must be auto or extra_encode")
+        if self.reference == "auto":
+            raise ValueError("sfr_oc.reference 'auto' was removed in 2.1.1: use 'extra_encode' (default) or "
+                             "'pipeline' (reuse the pipeline's own LR encode, what 'auto' did)")
+        if self.reference not in REFERENCES:
+            raise ValueError(f"sfr_oc.reference must be one of {REFERENCES}")
         if self.precision not in PRECISIONS:
             raise ValueError(f"sfr_oc.precision must be one of {PRECISIONS}")
 
@@ -273,7 +283,8 @@ def x0_coefficient(scheduler, t, eta=0.0):
 
 
 def correction_delta(model_output, sample, a, z_ref, W, gamma, cfg, prediction_type):
-    """(Delta, x0, r) in float32. Delta = gamma * LPF_h(W * LPF_h(r)) (band low) or gamma * W * r (band full)."""
+    """(Delta, x0, r) in float32 outside CUDA autocast (under test_seesr's autocast the filters run in fp16).
+    Delta = gamma * LPF_h(W * LPF_h(r)) (band low) or gamma * W * r (band full)."""
     import torch
 
     from .frequency import split_lowpass

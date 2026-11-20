@@ -6,7 +6,7 @@ sequenceDiagram
   participant U as UNet frozen, V1 soft-prompt hook
   participant O as SFR-OC step wrapper V2
   participant S as scheduler.step upstream DDPM or DDIM
-  Note over L: once per call - prepare_image builds W (heuristic or LORNet O, fused with S), the LR-start encode gives z_lr
+  Note over L: once per call - prepare_image builds W (heuristic or LORNet O, fused with S), one VAE encode of the conditioning image gives z_lr
   loop each t in scheduler.timesteps, e.g. 981 to 1 at 50 steps, 951 to 1 at 20 steps
     L->>C: x_t, t, LR image, prompts - CFG batch 2, per tile if tiled
     C-->>L: down/mid residuals

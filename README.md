@@ -1,214 +1,228 @@
-<div align=center class="logo">
-      <img src="figs/logo1.png" style="width:640px">
-   </a>
-</div>
+# CFA-SeeSR: Confidence and Fidelity-Aware SeeSR
 
-      
-## SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution (CVPR2024)
+CFA-SeeSR is a research extension of [SeeSR](https://github.com/cswry/SeeSR) (Wu et al., CVPR 2024) for real-world
+image super-resolution. SeeSR steers a Stable Diffusion 2 ControlNet with semantic prompts that its degradation-aware
+prompt extractor (DAPE) reads from the low-resolution (LR) image. Two kinds of unreliability remain:
 
-<a href='https://arxiv.org/abs/2311.16518'><img src='https://img.shields.io/badge/arXiv-2311.16518-b31b1b.svg'></a> &nbsp;&nbsp;
-<a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> &nbsp;&nbsp;
+* **semantic**: DAPE's tags and their image attention can be wrong or uncertain, yet they condition every step;
+* **fidelity**: the diffusion prior can invent high-frequency detail and drift from the low-frequency content that
+  the LR observation actually supports.
 
-[Rongyuan Wu](https://scholar.google.com.hk/citations?hl=zh-CN&user=A-U8zE8AAAAJ)<sup>1,2</sup> | [Tao Yang](https://cg.cs.tsinghua.edu.cn/people/~tyang/)<sup>3</sup> | [Lingchen Sun](https://scholar.google.com/citations?hl=zh-CN&tzom=-480&user=ZCDjTn8AAAAJ)<sup>1,2</sup> | [Zhengqiang Zhang](https://scholar.google.com.hk/citations?hl=zh-CN&user=UX26wSMAAAAJ)<sup>1,2</sup> | [Shuai Li](https://scholar.google.com.hk/citations?hl=zh-CN&user=Bd73ldQAAAAJ)<sup>1,2</sup> | [Lei Zhang](https://www4.comp.polyu.edu.hk/~cslzhang/)<sup>1,2</sup>
+CFA-SeeSR adds reliability estimates at inference time and uses them to modulate the conditioning (V1) and to pull
+the denoising trajectory toward the LR observation in the low frequencies, where and when the observation is
+trustworthy (V2.1). The SeeSR backbone (UNet, ControlNet, DAPE, VAE) is used **unchanged and frozen**; every
+component is attached by hooks, off by default, and recorded in each run's metadata.
 
-<sup>1</sup>The Hong Kong Polytechnic University, <sup>2</sup>OPPO Research Institute, <sup>3</sup>ByteDance Inc.
+> **Status.** The implementation is complete and unit-tested on CPU. GPU evidence so far is a **single-image pilot**
+> (below). Dataset-level evaluation on RealSR / DRealSR has not been run; no benchmark improvement is claimed.
 
-:star: If SeeSR is helpful to your images or projects, please help star this repo. Thanks! :hugs:
+## Contributions
 
-#### 🚩Accepted by CVPR2024
+| # | Component | What it does | Code |
+|---|---|---|---|
+| 1 | **Semantic confidence** (A) | Per-tag confidence from DAPE's logits and thresholds; drops low-confidence tags and scales the soft (embedding) prompt by an image-level reliability C | `cfa_seesr/semantic_confidence.py` |
+| 2 | **Timestep-dependent LR guidance** (B) | Scales ControlNet's LR residuals with a schedule f(t) over the actual DDPM timestep | `cfa_seesr/lr_guidance.py` |
+| 3 | **Spatial Semantic Reliability** (SSR) | Turns DAPE's tag-to-patch attention into a spatial map that modulates the soft prompt per location | `cfa_seesr/spatial_reliability.py` |
+| 4 | **SFR-OC** — Semantic- and Fidelity-Reliability guided, Frequency-selective Observation Consistency | In each scheduler step, moves the low-frequency part of the predicted clean latent toward the LR latent, weighted by a reliability map W and a timestep schedule; no extra UNet/ControlNet pass | `cfa_seesr/observation_consistency.py`, `frequency.py` |
+| 5 | **LORNet** — Learned Observation Reliability Network | 33,049-parameter CNN that predicts where the LR observation agrees with the HR image in the VAE latent space; trained offline, backbone frozen | `cfa_seesr/lornet.py`, `experiments/training/` |
 
+SFR-OC's map can come from two pathways:
 
-### 📢 News
-- **2026.04** Our new paper [VOSR](https://github.com/cswry/VOSR), a vision-only generative model for image super-resolution, has been accepted by **CVPR 2026**.
-- **2024.06** Our One-Step Real-ISR work [OSEDiff](https://github.com/cswry/OSEDiff) has been accepted by **NeurIPS 2024**, achieving SeeSR-level quality while being **over 30 times faster**.
-- **2024.03.10** Support [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), SeeSR can get a not bad image with only **2 steps** ⚡️. Please refer to [it](#Step-sd-turbo).
-- **2024.01.12** 🔥🔥🔥 Integrated to <a href='https://replicate.com/lucataco/seesr'><img src='https://replicate.com/lucataco/seesr/badge'></a> Try out <u>[Replicate](https://replicate.com/lucataco/seesr)</u> online demo ❤️ Thanks [lucataco](https://github.com/lucataco) for the implementation. 
-- **2024.01.09** 🚀 Add Gradio demo, including turbo mode.
-- **2023.12.25** 🎅🎄🎅🎄 *Merry Christmas!!!* 
-  - 🍺 Release SeeSR-SD2-Base, including the codes and pretrained models. 
-  - 📏 We also release `RealLR200`. It includes 200 real-world low-resolution images.
-- **2023.11.28** Create this repo.
+* **heuristic** (training-free): noise-compensated local indicators of the LR image — edge coherence, band energy,
+  contrast, signal share, sharpness (`cfa_seesr/observation_reliability.py`);
+* **learned**: LORNet, supervised by the agreement of LR and HR latents of the frozen VAE on paired training data.
 
-### 📌 TODO
-- [ ] SeeSR-SDXL
-- [ ] SeeSR-SD2-Base-face,text
-- [ ] ~~SeeSR Acceleration~~
+Both are fused with semantic reliability: W = clip(w_obs·O + w_sem·(1 − S)), S from SSR (or component A).
 
-## 🔎 Overview framework
-![seesr](figs/framework.png)
+## Architecture
 
-## 📷 Real-World Results
-[<img src="figs/building.png" height="320px"/>](https://imgsli.com/MjI5MTA2) [<img src="figs/person1.png" height="320px"/>](https://imgsli.com/MjI5MTA3)
-[<img src="figs/nature.png" height="320px"/>](https://imgsli.com/MjI5MTA0) [<img src="figs/bird1.png" height="320px"/>](https://imgsli.com/MjI5MTA1) 
-
-
-
-
-
-![seesr](figs/data_real_suppl.jpg)
-
-## ⚙️ Dependencies and Installation
-```
-## git clone this repository
-git clone https://github.com/cswry/SeeSR.git
-cd SeeSR
-
-# create an environment with python >= 3.8
-conda create -n seesr python=3.8
-conda activate seesr
-pip install -r requirements.txt
-```
-
-## 🚀 Quick Inference
-#### Step 1: Download the pretrained models
-- Download the pretrained SD-2-base models from [HuggingFace](https://huggingface.co/Manojb/stable-diffusion-2-base) or [GoogleDrive](https://drive.google.com/drive/folders/1LVSwWbjJdn5Wxy79AwV5LdPX2S2Hotx1).
-- Download the SeeSR and DAPE models from [GoogleDrive](https://drive.google.com/drive/folders/12HXrRGEXUAnmHRaf0bIn-S8XSK4Ku0JO?usp=drive_link) or [OneDrive](https://connectpolyu-my.sharepoint.com/:f:/g/personal/22042244r_connect_polyu_hk/EiUmSfWRmQFNiTGJWs7rOx0BpZn2xhoKN6tXFmTSGJ4Jfw?e=RdLbvg).
-
-You can put the models into `preset/models`.
-
-#### Step 2: Prepare testing data
-You can put the testing images in the `preset/datasets/test_datasets`.
-
-#### Step 3: Running testing command
-```
-python test_seesr.py \
---pretrained_model_path preset/models/stable-diffusion-2-base \
---prompt '' \
---seesr_model_path preset/models/seesr \
---ram_ft_path preset/models/DAPE.pth \
---image_path preset/datasets/test_datasets \
---output_dir preset/datasets/output \
---start_point lr \
---num_inference_steps 50 \
---guidance_scale 5.5 \
---process_size 512 
-```
-More details are [here](asserts/hyp.md)
-
-#### Step-sd-turbo
-Just download the weights from [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), and put them into `preset/models`. Then, you can run the command. More comparisons can be found [here](asserts/turbo.md). Note that the `guidance_scale` is fixed to `1.0` in turbo mode.
-```
-python test_seesr_turbo.py \
---pretrained_model_path preset/models/sd-turbo \
---prompt '' \
---seesr_model_path preset/models/seesr \
---ram_ft_path preset/models/DAPE.pth \
---image_path preset/datasets/test_datasets \
---output_dir preset/datasets/output \
---start_point lr \
---num_inference_steps 2 \
---guidance_scale 1.0 \
---process_size 512 
-```
-[<img src="figs/turbo_steps02_frog.png" height="350px"/>](https://imgsli.com/MjQ2ODA0) [<img src="figs/turbo_steps02_building.png" height="350px"/>](https://imgsli.com/MjQ2ODA2)
-
-#### Note
-Please read the arguments in `test_seesr.py` carefully. We adopt the tiled vae method proposed by [multidiffusion-upscaler-for-automatic1111](https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111) to save GPU memory.
-
-#### Gradio Demo
-Please put the all pretrained models at `preset/models`, and then run the following command to interact with the gradio website.
-```
-python gradio_seesr.py 
-```
-We also provide gradio with [sd-turbo](https://huggingface.co/stabilityai/sd-turbo), have fun. 🤗
-```
-python gradio_seesr_turbo.py 
-```
-![seesr](figs/gradio.png)
-
-
-#### Test Benchmark
-We release our `RealLR200` at [GoogleDrive](https://drive.google.com/drive/folders/1L2VsQYQRKhWJxe6yWZU9FgBWSgBCk6mz?usp=drive_link) and [OneDrive](https://connectpolyu-my.sharepoint.com/:f:/g/personal/22042244r_connect_polyu_hk/EmRLN-trNypJtO4tqleF4mAB5pVME060hRj6xuBXGsUCaA?e=PykXVx). You can download `RealSR` and `DRealSR` from [StableSR](https://huggingface.co/datasets/Iceclear/StableSR-TestSets). We also provide the copy of that at [GoogleDrive](https://drive.google.com/drive/folders/1L2VsQYQRKhWJxe6yWZU9FgBWSgBCk6mz?usp=drive_link) and [OneDrive](https://connectpolyu-my.sharepoint.com/:f:/g/personal/22042244r_connect_polyu_hk/EmRLN-trNypJtO4tqleF4mAB5pVME060hRj6xuBXGsUCaA?e=PykXVx). As for the synthetic test set, you can obtain it through the synthetic methods described below.
-
-## 🌈 Train 
-
-#### Step1: Download the pretrained models
-Download the pretrained [SD-2-base models](https://huggingface.co/Manojb/stable-diffusion-2-base) and [RAM](https://huggingface.co/spaces/xinyu1205/recognize-anything/blob/main/ram_swin_large_14m.pth). You can put them into `preset/models`.
-
-#### Step2: Prepare training data
-We pre-prepare training data pairs for the training process, which would take up some memory space but save training time. We train the DAPE with [COCO](https://cocodataset.org/#home) and train the SeeSR with LSDIR+FFHQ10k.
-
-For making paired data when training DAPE, you can run:
-
-```
-python utils_data/make_paired_data_DAPE.py \
---gt_path PATH_1 PATH_2 ... \
---save_dir preset/datasets/train_datasets/training_for_dape \
---epoch 1
-```
-For making paired data when training SeeSR, you can run:
-```
-python utils_data/make_paired_data.py \
---gt_path PATH_1 PATH_2 ... \
---save_dir preset/datasets/train_datasets/training_for_dape \
---epoch 1
+```mermaid
+flowchart LR
+  classDef frozen fill:#e3e3e3,stroke:#444,stroke-dasharray:5 3
+  classDef v1 fill:#dbe9ff,stroke:#2a5db0
+  classDef v2 fill:#ffe2c6,stroke:#c25e00
+  classDef learned fill:#d7f5d0,stroke:#2e8b2e
+  LR["LR image"] --> DAPE["DAPE semantic analysis<br/>(frozen)"]:::frozen
+  DAPE --> CONF["A: semantic confidence"]:::v1
+  DAPE --> SSR["SSR: spatial reliability S"]:::v1
+  CONF --> SSR
+  LR --> HEUR["observation reliability<br/>heuristic O"]:::v2
+  LR --> LOR["LORNet O<br/>(trained offline)"]:::learned
+  CONF --> PIPE
+  SSR --> PIPE["SeeSR diffusion<br/>UNet + ControlNet (frozen)<br/>B: LR guidance f(t)"]:::frozen
+  HEUR --> W["reliability fusion W"]:::v2
+  LOR --> W
+  SSR --> W
+  PIPE --> OC["SFR-OC correction<br/>in scheduler.step"]:::v2
+  W --> OC
+  OC -->|"x_t-1"| PIPE
+  OC --> DEC["VAE decoding (frozen)"]:::frozen --> SR["SR output"]
 ```
 
-- `--gt_path` the path of gt images. If you have multi gt dirs, you can set it as `PATH1 PATH2 PATH3 ...`
-- `--save_dir` the path of paired images 
-- `--epoch` the number of epoch you want to make
+Grey dashed: frozen pretrained SeeSR networks; blue: V1; orange: V2.1 inference code; green: the only trained part.
+Detailed diagrams (V1, V2.1 inference, LORNet network, LORNet training, SFR-OC data flow and timestep placement):
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-The difference between `make_paired_data_DAPE.py` and `make_paired_data.py` lies in that `make_paired_data_DAPE.py` resizes the entire image to a resolution of 512, while `make_paired_data.py` randomly crops a sub-image with a resolution of 512.
+## Method in brief
 
+Full derivations: [`docs/methodology.md`](docs/methodology.md) and [`cfa_seesr/README.md`](cfa_seesr/README.md).
 
-Once the degraded data pairs are created, you can base them to generate tag data by running `utils_data/make_tags.py`.
-
-The data folder should be like this:
-```
-your_training_datasets/
-    └── gt
-        └── 0000001.png # GT images, (512, 512, 3)
-        └── ...
-    └── lr
-        └── 0000001.png # LR images, (512, 512, 3)
-        └── ...
-    └── tag
-        └── 0000001.txt # tag prompts
-        └── ...
-```
-
-#### Step3: Training for DAPE
-Please specify the DAPE training data path at `line 13` of `basicsr/options/dape.yaml`, then run the training command:
-```
-python basicsr/train.py -opt basicsr/options/dape.yaml
-```
-You can modify the parameters in `dape.yaml` to adapt to your specific situation, such as the number of GPUs, batch size, optimizer selection, etc. For more details, please refer to the settings in Basicsr. 
-#### Step4: Training for SeeSR
-```
-CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7," accelerate launch train_seesr.py \
---pretrained_model_name_or_path="preset/models/stable-diffusion-2-base" \
---output_dir="./experience/seesr" \
---root_folders 'preset/datasets/training_datasets' \
---ram_ft_path 'preset/models/DAPE.pth' \
---enable_xformers_memory_efficient_attention \
---mixed_precision="fp16" \
---resolution=512 \
---learning_rate=5e-5 \
---train_batch_size=2 \
---gradient_accumulation_steps=2 \
---null_text_ratio=0.5 
---dataloader_num_workers=0 \
---checkpointing_steps=10000 
-```
-- `--pretrained_model_name_or_path` the path of pretrained SD model from Step 1
-- `--root_folders` the path of your training datasets from Step 2
-- `--ram_ft_path` the path of your DAPE model from Step 3
-
-
-The overall batch size is determined by num of `CUDA_VISIBLE_DEVICES`, `--train_batch_size`, and `--gradient_accumulation_steps` collectively. If your GPU memory is limited, you can consider reducing `--train_batch_size` while increasing `--gradient_accumulation_steps`.
-
-
-## ❤️ Acknowledgments
-This project is based on [diffusers](https://github.com/huggingface/diffusers) and [BasicSR](https://github.com/XPixelGroup/BasicSR). Some codes are brought from [PASD](https://github.com/yangxy/PASD) and [RAM](https://github.com/xinyu1205/recognize-anything). Thanks for their awesome works. We also pay tribute to the pioneering work of [StableSR](https://github.com/IceClear/StableSR).
-
-## 📧 Contact
-If you have any questions, please feel free to contact: `rong-yuan.wu@connect.polyu.hk`
-
-## 🎓Citations
-If our code helps your research or work, please consider citing our paper.
-The following are BibTeX references:
+**SFR-OC correction.** At a reverse step with predicted clean latent x̂₀ and reference z_lr (posterior mean of the VAE
+encoding of the upscaled LR image):
 
 ```
+Δ        = γ(t) · LPF_h( W ⊙ LPF_h(z_lr − x̂₀) )          two-pass Gaussian low-pass (σ = 3 latent px overall)
+x_{t−1}' = scheduler.step(model_output, t, x_t) + c₀(t) · Δ
+```
+
+c₀(t) is the coefficient of x̂₀ in the DDPM / DDIM update, so this equals stepping with x̂₀ + Δ (tested in float64)
+while the step itself runs on the original model output (same dtype, same noise draw). γ(t) = strength·t/T; with
+strength 0 the step is untouched, bit for bit. The second low-pass removes the high frequencies that multiplication
+by a spatial map W would otherwise introduce. The Gaussian is not band-limited: it halves amplitudes at a period of
+about 16 latent px (≈ 128 output px).
+
+**LORNet.** Input: luminance, gradient magnitude, local contrast, high-frequency energy of the conditioning image.
+Depthwise-separable encoder to 1/16 resolution with a multi-dilation context block, decoder with a skip at 1/8,
+sigmoid map at latent resolution (1/8). Target: R = exp(−E/τ), E = local average of |LPF(z_lr − z_hr)| from the
+frozen VAE; loss: Charbonnier + 0.05·TV. Only LORNet is trained.
+
+## LORNet training (pilot checkpoint `lornet_v1`)
+
+| | |
+|---|---|
+| Trainable parameters | 33,049 (LORNet only; SeeSR UNet, ControlNet, DAPE and VAE frozen) |
+| Architecture | depthwise-separable multi-scale CNN, 4 input features, sigmoid output at 1/8 resolution |
+| Data | RealSR V3 Canon + Nikon **training** split: 400 pairs → 368 training / 32 validation images (hash split by image) |
+| Latent cache | 1,088 training / 101 validation crops (512 px HR, frozen-VAE latents); τ = 0.32633 |
+| Objective | Charbonnier(σ(logit), exp(−E/τ)) + 0.05 · TV; AdamW 2e-3, cosine schedule |
+| Selection | early stopping at epoch 11 (patience 8); best checkpoint: epoch 3, validation loss 0.111512 |
+| Hardware | Colab Tesla T4, ≈ 14 s per epoch |
+
+Config: [`experiments/training/configs/lornet_realsr_v3.yaml`](experiments/training/configs/lornet_realsr_v3.yaml);
+log and summary: [`assets/training/`](assets/training/). The checkpoint itself is not in the repository.
+
+## Pilot results (single image)
+
+Observed GPU pilot on **Canon_001_LR4**, a StableSR RealSR test crop (byte-identical to the test file, SHA-256
+verified), 128 → 512, DDPM 30 steps, CFG 5.5, seed 42, Tesla T4, SFR-OC strength 1.0. Paired metrics from
+`experiments/evaluation/evaluate.py` (PSNR/SSIM on Y); every CSV, metadata file and SR output is in
+[`assets/pilots/canon_001/`](assets/pilots/canon_001/).
+
+| Metric | Original SeeSR | Heuristic SFR-OC | Learned LORNet |
+|---|---:|---:|---:|
+| PSNR ↑ | 26.4415 | 26.0001 | **26.7053** |
+| SSIM ↑ | 0.8763 | 0.8843 | **0.8870** |
+| LPIPS ↓ | **0.1795** | 0.2023 | 0.1828 |
+| DISTS ↓ | 0.1714 | 0.1953 | **0.1592** |
+
+![Pilot metrics](assets/figures/pilot_metrics.svg)
+
+![SR outputs](assets/comparisons/canon_001.png)
+
+* **Learned LORNet SFR-OC** gave the best PSNR (+0.26 dB over SeeSR), SSIM and DISTS (−0.012), with LPIPS within
+  0.003 of SeeSR.
+* **Learned vs heuristic reliability:** better on all four metrics (+0.71 dB PSNR, −0.036 DISTS).
+* **Cost:** the SFR-OC correction adds ≈ 13–20 ms over 30 steps; LORNet has 33 k parameters.
+
+These are single-image, single-seed observations from runs that also differ in V1 setting and software stack; the
+controlled ablation (`experiments/configs/v2_ablation.yaml`, configured, not yet run) is the experiment that
+attributes the gains. Provenance, cost and test-set evidence: [`docs/results.md`](docs/results.md).
+
+## Implementation characteristics
+
+* LORNet: 33,049 parameters; 143 M multiply-accumulates for a 512 × 512 input (convolutions only, counted by
+  `cfa_seesr.lornet.conv_macs`).
+* SFR-OC reuses the existing denoising trajectory: no additional UNet or ControlNet forward pass (asserted in tests).
+  Per image it adds one VAE encoder pass for the reference latent and one reliability-map computation; per corrected
+  step, two low-pass filters on a 4-channel latent.
+* Recorded in the pilots (single cold runs, T4, 30 steps): SFR-OC correction ≈ 13–20 ms per image in total,
+  reference encode 715 ms, map analysis 546 ms (heuristic) or 1959 ms (LORNet, first call including CUDA set-up);
+  peak VRAM 5.8–6.9 GB for all three runs. A proper benchmark (`experiments/tools/benchmark_sfroc.py`, warm runs,
+  one environment) has not been run.
+
+## Installation and usage
+
+Requirements: Python 3.10, CUDA GPU (a 16 GB T4 runs the fp16 defaults), the pinned stack in
+`experiments/requirements-colab.txt` (torch 2.0.1 + cu118, diffusers 0.21.0, transformers 4.25.0,
+huggingface_hub 0.25.2).
+
+```bash
+git clone -b research/cfa-seesr-v2 https://github.com/rithvik318/SeeSR.git && cd SeeSR
+python -m pip install -r experiments/requirements-colab.txt -r experiments/requirements-metrics.txt
+```
+
+Pretrained weights and datasets are **not** included; obtain them from the SeeSR authors (links in
+[`docs/upstream_seesr_README.md`](docs/upstream_seesr_README.md)) and place them as described in
+[`docs/reproducibility.md`](docs/reproducibility.md) (`preset/models/stable-diffusion-2-base`, `preset/models/seesr`,
+`preset/models/DAPE.pth`, `preset/models/ram_swin_large_14m.pth`).
+
+```bash
+# inference (paths and every setting come from the YAML; --dry_run validates without running)
+python experiments/run_inference.py --config experiments/configs/baseline.yaml --name my_run \
+    --set dataset.lr_dir=<LR folder> --set dataset.gt_dir=<HR folder>
+
+# V2.1 with heuristic or learned reliability (variants of the ablation sweep)
+python experiments/run_inference.py --sweep experiments/configs/v2_ablation.yaml --seeds 42 \
+    --variants v2_heur_sem v2_learned_sem --set method.sfr_oc.learned.checkpoint=<lornet best.pt>
+
+# LORNet training (frozen VAE latent cache, then training, then validation metrics)
+python experiments/training/train_lornet.py cache    --config experiments/training/configs/lornet_realsr_v3.yaml
+python experiments/training/train_lornet.py train    --config experiments/training/configs/lornet_realsr_v3.yaml
+python experiments/training/train_lornet.py evaluate --config experiments/training/configs/lornet_realsr_v3.yaml
+
+# paired evaluation of a run
+python experiments/evaluation/evaluate.py --sr_dir <run>/sr/sample00 --gt_dir <HR folder> \
+    --output_dir <run>/eval --paired --config experiments/configs/baseline.yaml
+
+# tests (CPU)
+python -m pytest -q experiments/tests
+```
+
+Colab notebooks: [`experiments/notebooks/lornet_training.ipynb`](experiments/notebooks/lornet_training.ipynb)
+and [`experiments/notebooks/seesr_evaluation.ipynb`](experiments/notebooks/seesr_evaluation.ipynb).
+Upstream SeeSR usage (`test_seesr.py`, Gradio demo, training) is unchanged.
+
+## Testing
+
+The suite in `experiments/tests/` covers the method components, the exact-no-op guarantees, scheduler
+equivalence, LORNet checkpoints and training, the runner and the tools, on CPU with tiny stand-in networks (no
+downloaded weights). The last recorded run in the Colab V2.1 environment (CPU-only) gave
+**294 passed, 1 skipped, 1 deselected** (`test_dry_run_reports_missing_checkpoints`, which depends on the local
+model folder). CUDA-specific paths (event timing, device placement) are exercised only by tests that skip without a
+GPU.
+
+## Limitations and future work
+
+* Evidence is one image. Full RealSR (100) and DRealSR (93) evaluation with paired statistics is the next step.
+* LORNet is trained on two cameras (RealSR V3 Canon/Nikon); transfer to other sensors and degradations is untested.
+* The ablations planned in `experiments/configs/v2_ablation.yaml` (mean-matched and shuffled maps, uniform map,
+  zero strength) have not been run on GPU.
+* Reliability maps are not calibrated probabilities; calibration and robustness need study.
+* GPU runtime and memory are recorded only as single pilot runs on a T4; no systematic benchmark yet.
+
+Details: [`docs/limitations.md`](docs/limitations.md).
+
+## Documentation
+
+| | |
+|---|---|
+| [`docs/methodology.md`](docs/methodology.md) | V1 and V2.1 methods, heuristic vs learned reliability, LORNet training |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | modules, data flow, diagrams |
+| [`docs/experiments.md`](docs/experiments.md) | protocols, configurations, seeds; completed vs planned |
+| [`docs/results.md`](docs/results.md) | pilot results and artifacts |
+| [`docs/reproducibility.md`](docs/reproducibility.md) | environment, weights, data layout, commands |
+| [`docs/limitations.md`](docs/limitations.md) | known limitations |
+| [`docs/related_work_v2.md`](docs/related_work_v2.md) | relation to prior work, hypotheses |
+
+## Acknowledgements and attribution
+
+This repository is a fork of [SeeSR](https://github.com/cswry/SeeSR) by Rongyuan Wu, Tao Yang, Lingchen Sun,
+Zhengqiang Zhang, Shuai Li and Lei Zhang. Everything outside `cfa_seesr/`, `experiments/`, `docs/` and `assets/` is
+their code and assets (with their own acknowledged sources: diffusers, BasicSR, PASD, RAM), used here unmodified
+under the Apache 2.0 license ([`LICENSE`](LICENSE)). Their original README is kept at
+[`docs/upstream_seesr_README.md`](docs/upstream_seesr_README.md). If you use the SeeSR backbone, cite:
+
+```bibtex
 @inproceedings{wu2024seesr,
   title={Seesr: Towards semantics-aware real-world image super-resolution},
   author={Wu, Rongyuan and Yang, Tao and Sun, Lingchen and Zhang, Zhengqiang and Li, Shuai and Zhang, Lei},
@@ -218,13 +232,6 @@ The following are BibTeX references:
 }
 ```
 
-## 🎫 License
-This project and related weights are released under the [Apache 2.0 license](LICENSE).
+RealSR and DRealSR belong to their respective authors and are not redistributed here.
 
-
-<details>
-<summary>statistics</summary>
-
-![visitors](https://visitor-badge.laobi.icu/badge?page_id=cswry/SeeSR)
-
-</details>
+CFA-SeeSR extensions: Bhesetty Rithvik (IIT Guwahati).
